@@ -1,0 +1,15 @@
+{
+  "name": "webcorn",
+  "version": "0.1.0",
+  "description": "ASGI/WSGI Server running in a browser",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "zenkj",
+  "license": "MIT",
+  "dependencies": {
+    "pyodide": "^0.26.4"
+  }
+}
