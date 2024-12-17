@@ -1,2 +1,2 @@
 # webcorn
-ASGI/WSGI Server running in a browser
+ASGI/WSGI Dev Server running in a browser
