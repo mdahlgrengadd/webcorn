@@ -3,10 +3,10 @@
   "version": "0.1.0",
   "description": "ASGI/WSGI Server running in a browser",
   "main": "index.js",
+  "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "preview": "vite preview"
+    "start": "python app.py || exit /b 0",
+    "build": "rollup -c"
   },
   "keywords": [],
   "author": "zenkj",
@@ -15,6 +15,9 @@
     "pyodide": "^0.26.4"
   },
   "devDependencies": {
-    "vite": "^6.0.1"
+    "@rollup/plugin-commonjs": "^28.0.2",
+    "@rollup/plugin-node-resolve": "^16.0.0",
+    "rollup": "^4.28.1",
+    "rollup-plugin-copy": "^3.5.0"
   }
 }

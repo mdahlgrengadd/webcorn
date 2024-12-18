@@ -3,21 +3,30 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="stylesheet" href="style.css">
     <title>WebCorn</title>
   </head>
   <body>
-    <div id="app"></div>
-    <script type="module" src="/src/main.js"></script>
-    <a href="/sw/">swapp</a>
+    <div id="app">
+        <div>
+            <h1>Hello Webcorn!</h1>
+            <div class="card">
+            <button id="counter" type="button"></button>
+            </div>
+            <p class="read-the-docs">
+            Click on the Vite logo to learn more
+            </p>
+        </div>
+
+    </div>
+    <script type="module" src="main.js"></script>
     <a href="/app/">app</a>
 
     <script>
         function registerServiceWorker() {
             if ('serviceWorker' in navigator) {
-                //navigator.serviceWorker.register('/sw/sw.js', {scope: 'http://app.frybox.io/'})
-                navigator.serviceWorker.register('/sw/sw.js', {scope: '/'})
+                navigator.serviceWorker.register('/sw/service-worker.mjs', {scope: '/app', type: 'module'})
                         .then(registration => {
                             console.log(`Service Worker registered with scope: ${registration.scope}`);
                         })

@@ -1,5 +1,6 @@
 from wsgiref.simple_server import make_server
 from pathlib import Path
+import signal
 
 class StaticFiles:
     def __init__(self, url_prefix, root_dir, headers=None):
@@ -16,9 +17,12 @@ class StaticFiles:
             file = file / 'index.html'
         content_types = {
             '.js': 'application/javascript',
+            '.mjs': 'application/javascript',
             '.css': 'text/css',
             '.png': 'image/png',
+            '.svg': 'image/svg',
             '.html': 'text/html',
+            '.wasm': 'application/wasm',
         }
         print(file)
         if file.exists():
@@ -41,23 +45,17 @@ class StaticFiles:
 
 class App:
     def __init__(self):
-        self.staticapp = StaticFiles('/static/', 'frystatic')
         headers = {
             'service-worker-allowed': '/',
         }
-        self.swapp = StaticFiles('/sw', 'sw', headers)
-        self.appapp = StaticFiles('/app', 'fryapp')
-        self.defaultapp = StaticFiles("/", '.')
+        self.swapp = StaticFiles('/sw', 'dist', headers)
+        self.defaultapp = StaticFiles("/", 'dist')
 
     def __call__(self, environ, start_response):
         path = environ['PATH_INFO']
         print(path)
-        if path.startswith('/static/'):
-            return self.staticapp(environ, start_response)
-        elif path.startswith('/sw'):
+        if path.startswith('/sw'):
             return self.swapp(environ, start_response)
-        elif path.startswith('/app'):
-            return self.appapp(environ, start_response)
         else:
             return self.defaultapp(environ, start_response)
 
@@ -68,5 +66,6 @@ print("Serving on port 8000 ...")
 try:
     httpd.serve_forever()
 except:
-    print("Shutting down.")
-    httpd.server_close()
+    pass
+print("Shutting down.")
+httpd.server_close()
