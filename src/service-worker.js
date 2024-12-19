@@ -18,6 +18,7 @@ let pyodide;
 
 const handleFetch = async e => {
     console.log("fetch received by service worker");
+    const request = e.request;
     let begin;
     let end;
     if (!pyodide) {
