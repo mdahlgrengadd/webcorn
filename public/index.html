@@ -18,15 +18,22 @@
             Click on the Vite logo to learn more
             </p>
         </div>
-
+        <div>
+            <a href="/project_wsgi">wsgi</a>
+            <a href="/project_asgi">asgi</a>
+        </div>
     </div>
-    <script type="module" src="main.js"></script>
-    <a href="/app/">app</a>
-
     <script>
         function registerServiceWorker() {
             if ('serviceWorker' in navigator) {
-                navigator.serviceWorker.register('/sw/service-worker.mjs', {scope: '/app', type: 'module'})
+                navigator.serviceWorker.register('/sw/service-worker.mjs', {scope: '/project_wsgi', type: 'module'})
+                        .then(registration => {
+                            console.log(`Service Worker registered with scope: ${registration.scope}`);
+                        })
+                        .catch(error => {
+                            console.error(`Service Worker registration failed: ${error}`);
+                        });
+                navigator.serviceWorker.register('/sw/service-worker.mjs', {scope: '/project_asgi', type: 'module'})
                         .then(registration => {
                             console.log(`Service Worker registered with scope: ${registration.scope}`);
                         })

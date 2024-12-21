@@ -16,13 +16,14 @@ class StaticFiles:
         if file.is_dir():
             file = file / 'index.html'
         content_types = {
-            '.js': 'application/javascript',
-            '.mjs': 'application/javascript',
+            '.js': 'text/javascript',
+            '.mjs': 'text/javascript',
             '.css': 'text/css',
             '.png': 'image/png',
             '.svg': 'image/svg',
             '.html': 'text/html',
             '.wasm': 'application/wasm',
+            '.zip': 'application/zip',
         }
         print(file)
         if file.exists():

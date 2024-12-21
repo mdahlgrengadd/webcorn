@@ -37,5 +37,6 @@ async def app(scope, receive, send):
             'type': 'http.response.body',
             'body': b'',
         })
+        return
 
 is_wsgi = False

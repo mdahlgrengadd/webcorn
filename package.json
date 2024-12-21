@@ -5,18 +5,20 @@
   "main": "index.js",
   "type": "module",
   "scripts": {
-    "start": "python app.py || exit /b 0",
-    "build": "rollup -c"
+    "start": "python app.py",
+    "build": "rollup -c && node zipit.js"
   },
   "keywords": [],
   "author": "zenkj",
   "license": "MIT",
   "dependencies": {
+    "comlink": "^4.4.2",
     "pyodide": "^0.26.4"
   },
   "devDependencies": {
     "@rollup/plugin-commonjs": "^28.0.2",
     "@rollup/plugin-node-resolve": "^16.0.0",
+    "archiver": "^7.0.1",
     "rollup": "^4.28.1",
     "rollup-plugin-copy": "^3.5.0"
   }

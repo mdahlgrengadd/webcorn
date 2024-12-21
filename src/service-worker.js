@@ -1,8 +1,13 @@
+import * as Comlink from "comlink";
+
 import { loadPyodide } from "./pyodide.mjs";
 // 静态加载pyodide.asm.js，否则在loadPyodide时将会动态加载，在module类型service worker中不支持动态加载
 import "./pyodide.asm.js";
 
 console.log(`enter service-worker.js from ${location}`);
+
+let scope;
+navigator.serviceWorker.getRegistration().then(reg => {scope = reg.scope; console.log(reg)});
 
 self.addEventListener('install', e => {
     console.log("installing service worker")
@@ -20,18 +25,33 @@ let is_wsgi;
 
 const buildEnviron = async (request) => {
     const url = new URL(request.url);
+
+    const method = url.method;
+    const scheme = url.protocol.slice(0, -1);
+    const hostname = url.hostname;
+    const port = url.port;
+    const path = url.pathname;
+    const query_string = url.search ? url.search.slice(1) : '';
+    const headers = {};
+    for (const [k, v] of request.headers) {
+        if (k in headers) {
+            headers[k] += ','+v;
+        } else {
+            headers[k] = v;
+        }
+    }
     const bytes = await request.bytes();
-    const headers = request.headers;
+
     const environ = {
-        REQUEST_METHOD: request.method,
+        REQUEST_METHOD: method,
         SCRIPT_NAME: '',
-        PATH_INFO: url.pathname,
-        QUERY_STRING: url.search ? url.search.slice(1) : '',
-        SERVER_NAME: url.hostname,
-        SERVER_PORT: url.port,
+        PATH_INFO: pathname,
+        QUERY_STRING: query_string,
+        SERVER_NAME: hostname,
+        SERVER_PORT: port,
         SERVER_PROTOCOL: 'HTTP/1.1',
         //'wsgi.version': (1, 0),
-        'wsgi.url_scheme': url.protocol.slice(0, -1),
+        'wsgi.url_scheme': scheme,
         //'wsgi.input': BytesIO(bytes),
         //'wsgi.errors': StringIO(),
         'wsgi.multithread': false,
@@ -59,9 +79,104 @@ const buildEnviron = async (request) => {
             environ[k2] = v;
         }
     }
+    return environ;
+}
+
+const buildScope = async (request) => {
+    const url = new URL(request.url);
+    const method = url.method;
+    const scheme = url.protocol.slice(0, -1);
+    const hostname = url.hostname;
+    const port = url.port;
+    const path = url.pathname;
+    const query_string = url.search ? url.search.slice(1) : '';
+    const headers = {};
+    for (const [k, v] of request.headers) {
+        if (k in headers) {
+            headers[k] += ','+v;
+        } else {
+            headers[k] = v;
+        }
+    }
+    const bytes = await request.bytes();
+
+    const version = '3.0';
+    const spec_version = '2.3';
+    const state = {};
+    const scope = {
+        type: 'http',
+        asgi: {version, spec_version},
+        http_version: '1.1',
+        method,
+        scheme,
+        path, //转为bytes
+        raw_path: path, //转为bytes
+        query_string, //转为bytes
+        root_path: '',
+        headers,
+        client: ['127.0.0.1', 0],
+        server: [hostname, port],
+        state,
+    }
+    return scope;
+}
+
+let worker;
+
+const pingForever = async (w) => {
+    await w.ping();
+
+    setTimeout(()=>pingForever(w), 5000);
 }
 
 const handleFetch = async e => {
+    console.log("fetch received by service worker");
+    const request = e.request;
+    const url = new URL(request.url);
+    const method = url.method;
+    const scheme = url.protocol.slice(0, -1);
+    const hostname = url.hostname;
+    const port = url.port;
+    const path = url.pathname;
+    const query_string = url.search ? url.search.slice(1) : '';
+    const headers = {};
+    for (const [k, v] of request.headers) {
+        if (k in headers) {
+            headers[k] += ','+v;
+        } else {
+            headers[k] = v;
+        }
+    }
+    const body = await request.bytes();
+
+
+    if (!worker) {
+        const scope = (await navigator.serviceWorker.getRegistration()).scope;
+        const root_path = new URL(scope).pathname;
+        worker = new Worker('/webcorn.js', {type: 'module'});
+        worker = Comlink.wrap(worker);
+        worker.start(root_path);
+        await pingForever(worker);
+    }
+    let data = {
+        method,
+        scheme,
+        hostname,
+        port,
+        path,
+        query_string,
+        headers,
+        body
+    };
+    data = Comlink.transfer(data, [data.body]);
+    result = await worker.run(data);
+    return new Response(result.body, {
+        status: result.status,
+        headers: result.headers
+    });
+}
+
+const handleFetch0 = async e => {
     console.log("fetch received by service worker");
     const request = e.request;
     let begin;

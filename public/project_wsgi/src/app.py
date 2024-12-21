@@ -1,5 +1,3 @@
-from pyodide.ffi import to_js
-
 def app(environ, start_response):
     print("wsgi app running")
     status = "200 OK"
@@ -10,7 +8,5 @@ def app(environ, start_response):
     write = start_response(status, headers)
     write(b"Hello ")
     return [b"Webcorn!"]
-
-app = to_js(app)
 
 is_wsgi = True

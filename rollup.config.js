@@ -29,7 +29,7 @@ export default [
                 targets: [
                     {src: 'node_modules/pyodide/pyodide*', dest: 'dist'},
                     {src: 'node_modules/pyodide/python_stdlib.zip', dest: 'dist'},
-                    {src: 'public/*', dest: 'dist'},
+                    {src: 'public/*.*', dest: 'dist'},
                 ]
             }),
         ]
