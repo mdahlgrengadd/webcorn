@@ -164,6 +164,10 @@ const handleFetch = async e => {
         const app = path.slice('/webcorn/'.length, -'/__start'.length);
         console.log(`service worker: register webcorn server ${app}`);
         printClients();
+    } else if (path === '/webcorn/webcorn.mjs') {
+        console.log(`service worker: start webcorn server ${app}`);
+        printClients();
+        return await fetch(path);
     }
 
     setTimeout(printClients, 1000);

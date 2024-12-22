@@ -42,11 +42,11 @@
         const startWsgi = document.getElementById('start_wsgi');
         const startAsgi = document.getElementById('start_asgi');
         startWsgi.addEventListener('click', () => {
-            const worker = new Worker('/webcorn.mjs', {type: 'module'});
+            const worker = new Worker('/webcorn/webcorn.mjs', {type: 'module'});
             worker.postMessage({type: 'webcorn.start', appRoot: '/webcorn/project_wsgi'});
         });
         startAsgi.addEventListener('click', () => {
-            const worker = new Worker('/webcorn.mjs', {type: 'module'});
+            const worker = new Worker('/webcorn/webcorn.mjs', {type: 'module'});
             worker.postMessage({type: 'webcorn.start', appRoot: '/webcorn/project_asgi'});
         });
     </script>

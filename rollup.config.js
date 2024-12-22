@@ -7,7 +7,7 @@ export default [
         input: 'src/webcorn.js',
         output: [
             {
-                file: 'dist/webcorn.mjs',
+                file: 'dist/webcorn/webcorn.mjs',
                 format: 'es'
             },
         ],
@@ -17,8 +17,8 @@ export default [
             commonjs(),
             copy({
                 targets: [
-                    {src: 'node_modules/pyodide/pyodide*', dest: 'dist'},
-                    {src: 'node_modules/pyodide/python_stdlib.zip', dest: 'dist'},
+                    {src: 'node_modules/pyodide/pyodide*', dest: 'dist/webcorn'},
+                    {src: 'node_modules/pyodide/python_stdlib.zip', dest: 'dist/webcorn'},
                     {src: 'public/*.*', dest: 'dist'},
                 ]
             }),
