@@ -1,13 +1,23 @@
 import * as Comlink from "comlink";
 
-import { loadPyodide } from "./pyodide.mjs";
+//import { loadPyodide } from "./pyodide.mjs";
 // 静态加载pyodide.asm.js，否则在loadPyodide时将会动态加载，在module类型service worker中不支持动态加载
-import "./pyodide.asm.js";
+//import "./pyodide.asm.js";
 
 console.log(`enter service-worker.js from ${location}`);
 
-let scope;
-navigator.serviceWorker.getRegistration().then(reg => {scope = reg.scope; console.log(reg)});
+console.log(self.registration.scope);
+
+const printClients = () => {
+    clients.matchAll().then(allClients => {
+        console.log('all clients:');
+        for (const client of allClients) {
+            console.log(client);
+        }
+    });
+}
+
+printClients();
 
 self.addEventListener('install', e => {
     console.log("installing service worker")
@@ -22,6 +32,7 @@ self.addEventListener('activate', e => {
 let pyodide;
 let app;
 let is_wsgi;
+
 
 const buildEnviron = async (request) => {
     const url = new URL(request.url);
@@ -121,8 +132,6 @@ const buildScope = async (request) => {
     return scope;
 }
 
-let worker;
-
 const pingForever = async (w) => {
     await w.ping();
 
@@ -147,11 +156,29 @@ const handleFetch = async e => {
             headers[k] = v;
         }
     }
-    const body = await request.bytes();
+    const body = await request.arrayBuffer();
 
+    console.log(`service worker: received ${path}`)
 
+    if (path.startsWith('/webcorn/') && path.endsWith('/__start')){
+        const app = path.slice('/webcorn/'.length, -'/__start'.length);
+        console.log(`service worker: register webcorn server ${app}`);
+        printClients();
+    }
+
+    setTimeout(printClients, 1000);
+
+    return new Response('OKK', {
+        status: 200,
+        headers: {
+            'Content-Type': 'text/plain; charset=utf-8',
+        }
+    });
+
+    
+    /*
     if (!worker) {
-        const scope = (await navigator.serviceWorker.getRegistration()).scope;
+        const scope = registration.scope;
         const root_path = new URL(scope).pathname;
         worker = new Worker('/webcorn.js', {type: 'module'});
         worker = Comlink.wrap(worker);
@@ -174,6 +201,7 @@ const handleFetch = async e => {
         status: result.status,
         headers: result.headers
     });
+    */
 }
 
 const handleFetch0 = async e => {

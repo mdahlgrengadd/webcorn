@@ -46,19 +46,16 @@ class StaticFiles:
 
 class App:
     def __init__(self):
-        headers = {
-            'service-worker-allowed': '/',
-        }
-        self.swapp = StaticFiles('/sw', 'dist', headers)
+        #headers = {
+        #    'service-worker-allowed': '/',
+        #}
+        #self.swapp = StaticFiles('/sw', 'dist', headers)
         self.defaultapp = StaticFiles("/", 'dist')
 
     def __call__(self, environ, start_response):
         path = environ['PATH_INFO']
         print(path)
-        if path.startswith('/sw'):
-            return self.swapp(environ, start_response)
-        else:
-            return self.defaultapp(environ, start_response)
+        return self.defaultapp(environ, start_response)
 
 
 httpd = make_server('', 8000, App())

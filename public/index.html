@@ -19,21 +19,18 @@
             </p>
         </div>
         <div>
-            <a href="/project_wsgi">wsgi</a>
-            <a href="/project_asgi">asgi</a>
+            <a href="/webcorn/project_wsgi">wsgi</a>
+            <a href="/webcorn/project_asgi">asgi</a>
+        </div>
+        <div>
+            <button type="button" id="start_wsgi">Start WSGI</button>
+            <button type="button" id="start_asgi">Start ASGI</button>
         </div>
     </div>
     <script>
-        function registerServiceWorker() {
+        window.addEventListener('load', () => {
             if ('serviceWorker' in navigator) {
-                navigator.serviceWorker.register('/sw/service-worker.mjs', {scope: '/project_wsgi', type: 'module'})
-                        .then(registration => {
-                            console.log(`Service Worker registered with scope: ${registration.scope}`);
-                        })
-                        .catch(error => {
-                            console.error(`Service Worker registration failed: ${error}`);
-                        });
-                navigator.serviceWorker.register('/sw/service-worker.mjs', {scope: '/project_asgi', type: 'module'})
+                navigator.serviceWorker.register('/webcorn/service-worker.mjs', {type: 'module'})
                         .then(registration => {
                             console.log(`Service Worker registered with scope: ${registration.scope}`);
                         })
@@ -41,8 +38,17 @@
                             console.error(`Service Worker registration failed: ${error}`);
                         });
             }
-        }
-        window.addEventListener('load', () => registerServiceWorker());
+        });
+        const startWsgi = document.getElementById('start_wsgi');
+        const startAsgi = document.getElementById('start_asgi');
+        startWsgi.addEventListener('click', () => {
+            const worker = new Worker('/webcorn.mjs', {type: 'module'});
+            worker.postMessage({type: 'webcorn.start', appRoot: '/webcorn/project_wsgi'});
+        });
+        startAsgi.addEventListener('click', () => {
+            const worker = new Worker('/webcorn.mjs', {type: 'module'});
+            worker.postMessage({type: 'webcorn.start', appRoot: '/webcorn/project_asgi'});
+        });
     </script>
   </body>
 </html>

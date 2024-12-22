@@ -4,23 +4,13 @@ import copy from 'rollup-plugin-copy';
 
 export default [
     {
-        input: 'src/main.js',
+        input: 'src/webcorn.js',
         output: [
             {
-                file: 'dist/main.js',
-                format: 'iife'
+                file: 'dist/webcorn.mjs',
+                format: 'es'
             },
         ],
-        plugins: [
-            commonjs(),
-        ]
-    },
-    {
-        input: 'src/service-worker.js',
-        output: {
-            file: 'dist/service-worker.mjs',
-            format: 'es'
-        },
         external: ['./pyodide.mjs', './pyodide.asm.js'],
         plugins: [
             resolve(),
@@ -32,6 +22,17 @@ export default [
                     {src: 'public/*.*', dest: 'dist'},
                 ]
             }),
+        ]
+    },
+    {
+        input: 'src/service-worker.js',
+        output: {
+            file: 'dist/webcorn/service-worker.mjs',
+            format: 'es'
+        },
+        plugins: [
+            resolve(),
+            commonjs(),
         ]
     }
 ];

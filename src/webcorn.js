@@ -1,3 +1,22 @@
+let appRoot;
+self.addEventListener('message', async (event) => {
+    const data = event.data;
+    if (data.type === 'webcorn.start') {
+        appRoot = data.appRoot;
+        const startUrl = `${appRoot}/__start`;
+        const response = await fetch(startUrl);
+        const text = await response.text();
+        console.log(`worker ${appRoot}: ${text}`);
+        console.log(event.source);
+        return;
+    }
+    if (data.type === 'webcorn.request') {
+        console.log('webcorn.request');
+        console.log(event.source);
+        return;
+    }
+});
+/*
 // This is the web worker main js that run the webcorn server
 import * as Comlink from "comlink";
 
@@ -52,3 +71,4 @@ Comlink.expose({
     start,
     run,
 })
+    */
