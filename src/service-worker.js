@@ -8,25 +8,27 @@ console.log(`enter service-worker.js from ${location}`);
 
 console.log(self.registration.scope);
 
-const printClients = () => {
-    clients.matchAll().then(allClients => {
-        console.log('all clients:');
-        for (const client of allClients) {
-            console.log(client);
-        }
-    });
+const printClients = async (msg) => {
+    const allClients = await clients.matchAll();
+    console.log(`all clients: ${msg}`);
+    for (const client of allClients) {
+        console.log(client);
+    }
 }
 
-printClients();
+printClients('just enter service-worker.js');
 
-self.addEventListener('install', e => {
+self.addEventListener('install', async e => {
     console.log("installing service worker")
-    self.skipWaiting();
+    //new Worker('/webcorn/webcorn.mjs', {type: 'module', name: 'worker form service worker'});
+    await self.skipWaiting();
+    await printClients('install event');
 });
 
-self.addEventListener('activate', e => {
+self.addEventListener('activate', async e => {
     console.log("activating service worker")
-    self.clients.claim();
+    await self.clients.claim();
+    await printClients('activate event after clients.claim');
 });
 
 let pyodide;
@@ -156,21 +158,53 @@ const handleFetch = async e => {
             headers[k] = v;
         }
     }
-    const body = await request.arrayBuffer();
+    //const body = await request.arrayBuffer();
 
     console.log(`service worker: received ${path}`)
 
     if (path.startsWith('/webcorn/') && path.endsWith('/__start')){
         const app = path.slice('/webcorn/'.length, -'/__start'.length);
         console.log(`service worker: register webcorn server ${app}`);
-        printClients();
+        await printClients(`fetch ${path}`);
     } else if (path === '/webcorn/webcorn.mjs') {
         console.log(`service worker: start webcorn server ${app}`);
-        printClients();
+        await printClients(`fetch ${path}`);
         return await fetch(path);
+    } else if (path === '/webcorn/server') {
+        console.log(`create webcorn-server`);
+        await printClients(`fetch ${path}`);
+        setTimeout(()=>printClients(`fetch ${path}`), 5000);
+        const body = `<script type="module" src="/webcorn-server.mjs"></script>`;
+        return new Response(body, {
+                status: 200,
+                headers: {
+                    'Content-Type': 'text/html; charset=utf-8',
+                }
+            }
+        );
+    } else if (path === '/webcorn/project_wsgi') {
+        /*
+        const body = `
+        <h1>/webcorn/project_wsgi</h1>
+        <div>创建两个worker！</div>
+        <script>
+            const worker1 = new Worker('/webcorn/webcorn.mjs', {type: 'module', name: 'wsgi.worker1-from-service.worker'});
+            worker1.postMessage({type: 'webcorn.start', appRoot: '/webcorn/project_wsgi'});
+            const worker2 = new Worker('/webcorn.mjs', {type: 'module', name: 'wsgi.worker2-from-service.worker'});
+            worker2.postMessage({type: 'webcorn.start', appRoot: '/webcorn/project_wsgi'});
+        </script>
+        `;
+        */
+        const body = '<h1>Hello project_wsgi</h1>'
+        await printClients(`fetch ${path}`);
+        setTimeout(()=>printClients(`fetch ${path}`), 5000);
+        return new Response(body, {
+            status: 200,
+            headers: {
+                'Content-Type': 'text/html; charset=utf-8',
+            }
+        })
     }
-
-    setTimeout(printClients, 1000);
 
     return new Response('OKK', {
         status: 200,

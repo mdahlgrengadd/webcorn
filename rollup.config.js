@@ -10,6 +10,10 @@ export default [
                 file: 'dist/webcorn/webcorn.mjs',
                 format: 'es'
             },
+            {
+                file: 'dist/webcorn.mjs',
+                format: 'es'
+            },
         ],
         external: ['./pyodide.mjs', './pyodide.asm.js'],
         plugins: [
@@ -22,6 +26,17 @@ export default [
                     {src: 'public/*.*', dest: 'dist'},
                 ]
             }),
+        ]
+    },
+    {
+        input: 'src/webcorn-server.js',
+        output: {
+            file: 'dist/webcorn-server.mjs',
+            format: 'es'
+        },
+        plugins: [
+            resolve(),
+            commonjs(),
         ]
     },
     {
