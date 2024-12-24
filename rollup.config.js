@@ -31,8 +31,8 @@ export default [
     {
         input: 'src/webcorn-server.js',
         output: {
-            file: 'dist/webcorn-server.mjs',
-            format: 'es'
+            file: 'dist/webcorn-server.js',
+            format: 'iife'
         },
         plugins: [
             resolve(),

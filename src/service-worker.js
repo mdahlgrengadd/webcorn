@@ -141,7 +141,6 @@ const pingForever = async (w) => {
 }
 
 const handleFetch = async e => {
-    console.log("fetch received by service worker");
     const request = e.request;
     const url = new URL(request.url);
     const method = url.method;
@@ -160,7 +159,7 @@ const handleFetch = async e => {
     }
     //const body = await request.arrayBuffer();
 
-    console.log(`service worker: received ${path}`)
+    console.log(`service worker: fetch received ${path}, ${request.url}`)
 
     if (path.startsWith('/webcorn/') && path.endsWith('/__start')){
         const app = path.slice('/webcorn/'.length, -'/__start'.length);
@@ -174,7 +173,11 @@ const handleFetch = async e => {
         console.log(`create webcorn-server`);
         await printClients(`fetch ${path}`);
         setTimeout(()=>printClients(`fetch ${path}`), 5000);
-        const body = `<script type="module" src="/webcorn-server.mjs"></script>`;
+        const body = `
+        <a href="/webcorn/foo">/webcore/foo</a>
+        <a href="/foo">/foo</a>
+        <script src="/webcorn-server.js"></script>
+        `;
         return new Response(body, {
                 status: 200,
                 headers: {
@@ -206,7 +209,7 @@ const handleFetch = async e => {
         })
     }
 
-    return new Response('OKK', {
+    return new Response(`OKK: ${path}`, {
         status: 200,
         headers: {
             'Content-Type': 'text/plain; charset=utf-8',
