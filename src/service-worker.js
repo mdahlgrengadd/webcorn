@@ -140,26 +140,42 @@ const pingForever = async (w) => {
     setTimeout(()=>pingForever(w), 5000);
 }
 
-const handleFetch = async e => {
-    const request = e.request;
-    const url = new URL(request.url);
+const getRequest = async e => {
+    const url = new URL(e.request.url);
     const method = url.method;
     const scheme = url.protocol.slice(0, -1);
-    const hostname = url.hostname;
+    const server = url.hostname;
     const port = url.port;
     const path = url.pathname;
-    const query_string = url.search ? url.search.slice(1) : '';
+    const query = url.search ? url.search.slice(1) : '';
     const headers = {};
-    for (const [k, v] of request.headers) {
+    for (const [k, v] of e.request.headers) {
         if (k in headers) {
             headers[k] += ','+v;
         } else {
             headers[k] = v;
         }
     }
-    //const body = await request.arrayBuffer();
+    const body = await request.arrayBuffer();
 
-    console.log(`service worker: fetch received ${path}, ${request.url}`)
+    let request = {
+        method,
+        scheme,
+        server,
+        port,
+        path,
+        query,
+        headers,
+        body
+    };
+    
+    request = Comlink.transfer(request, [request.body]);
+    return request;
+}
+
+const handleFetch = async e => {
+
+    console.log(`service worker: fetch received ${path}, ${e.request.url}`)
 
     if (path.startsWith('/webcorn/') && path.endsWith('/__start')){
         const app = path.slice('/webcorn/'.length, -'/__start'.length);
