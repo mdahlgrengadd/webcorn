@@ -18,6 +18,14 @@ const printClients = async (msg) => {
 
 printClients('just enter service-worker.js');
 
+function clientEndPoint(client) {
+    return {
+        addEventListener: self.addEventListener.bind(self),
+        removeEventListener: self.removeEventListener.bind(self),
+        postMessage: client.postMessage.bind(client),
+    }
+}
+
 self.addEventListener('install', async e => {
     console.log("installing service worker")
     //new Worker('/webcorn/webcorn.mjs', {type: 'module', name: 'worker form service worker'});
