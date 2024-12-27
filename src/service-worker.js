@@ -28,7 +28,7 @@ function clientEndPoint(client) {
 
 self.addEventListener('install', async e => {
     console.log("installing service worker")
-    //new Worker('/webcorn/webcorn.mjs', {type: 'module', name: 'worker form service worker'});
+
     await self.skipWaiting();
     await printClients('install event');
 });
