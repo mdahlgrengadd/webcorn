@@ -4,14 +4,10 @@ import copy from 'rollup-plugin-copy';
 
 export default [
     {
-        input: 'src/webcorn.js',
+        input: 'src/server.js',
         output: [
             {
-                file: 'dist/webcorn/webcorn.mjs',
-                format: 'es'
-            },
-            {
-                file: 'dist/webcorn.mjs',
+                file: 'dist/webcorn/server.mjs',
                 format: 'es'
             },
         ],
@@ -26,17 +22,6 @@ export default [
                     {src: 'public/*.*', dest: 'dist'},
                 ]
             }),
-        ]
-    },
-    {
-        input: 'src/webcorn-server.js',
-        output: {
-            file: 'dist/webcorn-server.js',
-            format: 'iife'
-        },
-        plugins: [
-            resolve(),
-            commonjs(),
         ]
     },
     {
