@@ -29,7 +29,7 @@
     <script>
         window.addEventListener('load', () => {
             if ('serviceWorker' in navigator) {
-                navigator.serviceWorker.register('/webcorn/service-worker.mjs', {type: 'module'})
+                navigator.serviceWorker.register('/service-worker.mjs', {type: 'module'})
                         .then(registration => {
                             console.log(`Service Worker registered with scope: ${registration.scope}`);
                         })
@@ -52,6 +52,6 @@
         */
     </script>
     <iframe style="display: block; height: 300; width: 300px; border:1px;"
-            src="/webcorn/server.html"></iframe>
+            src="/server/index.html"></iframe>
   </body>
 </html>

@@ -7,19 +7,9 @@ import { loadPyodide } from "./pyodide.mjs";
 
 let started = false;
 let isWsgi = true;
-let lastPing = 0;
 let pyodide;
 
-const ping = () => {
-    let now = Date.now();
-    if (lastPing > 0 && (now - lastPing) > 30*1000) {
-        self.close();
-        return;
-    }
-    lastPing = now;
-}
-
-const start = async root_path => {
+const start = async (projectRoot, appSpec) => {
     let begin = performance.now();
     console.log("loading pyodide");
     pyodide = await loadPyodide();
@@ -28,27 +18,21 @@ const start = async root_path => {
     const response = await fetch("/webcorn.py");
     const text = await response.text();
     await pyodide.runPythonAsync(text);
-    pyodide.globals.get('load')(root_path)
-    isWsgi = pyodide.globals.get('is_wsgi')
+    pyodide.globals.get('load')(projectRoot, appSpec);
+    isWsgi = pyodide.globals.get('is_wsgi');
     started = true;
 }
 
-const run = async request => {
+const handleRequest = request => {
     if (!started) {
         return;
     }
-    let response;
-    if (isWsgi) {
-        response = pyodide.globals.get('run_wsgi')(request);
-    } else {
-        response = await pyodide.globals.get('run_asgi')(request);
-    }
-    response = Comlink.transfer(response, [response.body]);
+    const response = pyodide.globals.get('run_wsgi')(request);
+    Comlink.transfer(response, [response.body]);
     return response;
 }
 
 Comlink.expose({
-    ping,
     start,
-    run,
+    handleRequest,
 })

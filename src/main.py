@@ -1,7 +1,18 @@
 from functools import partial
 from asyncio import iscoroutinefunction
 from importlib import import_module
+from collections import Iterable
+import inspect
+import sys
+from pathlib import Path
+from io import BytesIO
 import pyodide
+from pyodide.http import pyfetch
+from pyodide.ffi import to_py
+
+app = None
+is_wsgi = True
+app_root = ''
 
 def is_wsgi_app(app):
     # 检查对象是否可调用
@@ -109,3 +120,52 @@ def load_app(app_spec):
     if not is_wsgi and not is_asgi:
         raise RuntimeError(f"app object should be wsgi app or asgi app")
     return instance, is_wsgi
+
+def build_environ(request):
+    pathname = request['pathname']
+    if pathname.startswith(app_root):
+        pathname = pathname[len(app_root):]
+    environ = {
+        'REQUEST_METHOD': request['method'],
+        'SCRIPT_NAME': app_root,
+        'PATH_INFO': pathname,
+        'QUERY_STRING': request['query_string'],
+        'SERVER_NAME': request['hostname'],
+        'SERVER_PORT': str(request['port']),
+        'SERVER_PROTOCOL': 'HTTP/0.1',
+        'wsgi.version': (0, 0),
+        'wsgi.url_scheme': request['scheme'],
+        'wsgi.input': BytesIO(request['body']),
+        'wsgi.errors': sys.stderr,
+        'wsgi.multithread': False,
+        'wsgi.multiprocess': False,
+        'wsgi.run_once': False,
+    }
+    headers = request['headers']
+    if 'content-type' in headers:
+        environ['CONTENT_TYPE'] = headers['content-type']
+    else:
+        environ['CONTENT_TYPE'] = 'text/plain' 
+    if 'content-length' in headers:
+        environ['CONTENT_LENGTH'] = headers['content-length']
+    else:
+        environ['CONTENT_LENGTH'] = ''
+
+    for k, v in headers:
+        k = k.replace('-', '_').upper()
+        v = v.strip()
+        if k in environ:
+            continue
+        k = f'HTTP_{k}'
+        if k in environ:
+            environ[k] += ',' + v
+        else:
+            environ[k] = v
+    return environ
+
+def run_wsgi(request):
+    request = to_py(request)
+    environ = build_environ(request)
+
+async def run_asgi(request):
+    pass

@@ -7,7 +7,7 @@ export default [
         input: 'src/server.js',
         output: [
             {
-                file: 'dist/webcorn/server.mjs',
+                file: 'dist/server/index.mjs',
                 format: 'es'
             },
         ],
@@ -17,9 +17,9 @@ export default [
             commonjs(),
             copy({
                 targets: [
-                    {src: 'node_modules/pyodide/pyodide*', dest: 'dist/webcorn'},
-                    {src: 'node_modules/pyodide/python_stdlib.zip', dest: 'dist/webcorn'},
                     {src: 'public/*.*', dest: 'dist'},
+                    {src: 'node_modules/pyodide/pyodide*', dest: 'dist/server'},
+                    {src: 'node_modules/pyodide/python_stdlib.zip', dest: 'dist/server'},
                 ]
             }),
         ]
@@ -27,7 +27,7 @@ export default [
     {
         input: 'src/service-worker.js',
         output: {
-            file: 'dist/webcorn/service-worker.mjs',
+            file: 'dist/service-worker.mjs',
             format: 'es'
         },
         plugins: [

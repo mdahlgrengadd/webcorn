@@ -41,8 +41,8 @@ self.addEventListener('install', async e => {
     e.waitUntil(
         addResourcesToCache([
             joinUrl(scope, 'config'),
-            joinUrl(scope, 'server.html'),
-            joinUrl(scope, 'server.mjs'),
+            joinUrl(scope, 'server/index.html'),
+            joinUrl(scope, 'server/index.mjs'),
         ])
     )
     //await self.skipWaiting();
@@ -66,7 +66,71 @@ self.addEventListener('fetch', async e => {
 });
 
 let serverEndPoint;
+let serverWrapper;
+let serverConfig;
 
+const updateConfig = async () => {
+    if (!serverConfig) {
+        const scope = self.registration.scope;
+        const response = await self.caches.match(joinUrl(scope, 'config'));
+        serverConfig = await response.json() || {
+            projectRoot: './',
+            appSpec: '',
+            appUrl: joinUrl(scope, 'app'),
+            serverUrl: joinUrl(scope, 'server'),
+            staticRoot: './static/',
+            static_url: joinUrl(scope, 'app/static'),
+        };
+    }
+}
+
+const getRequest = async (event) => {
+    const url = new URL(event.request.url);
+    const method = event.request.method;
+    const scheme = url.protocol.slice(0, -1);
+    const server = url.hostname;
+    const port = url.port;
+    const path = url.pathname;
+    const query = url.search ? url.search.slice(1) : '';
+    const headers = {};
+    for (const [k, v] of event.request.headers) {
+        if (k in headers) {
+            headers[k] += ','+v;
+        } else {
+            headers[k] = v;
+        }
+    }
+    const body = await request.arrayBuffer();
+
+    let request = {
+        method,
+        scheme,
+        server,
+        port,
+        path,
+        query,
+        headers,
+        body
+    };
+    
+    request = Comlink.transfer(request, [request.body]);
+    return request;
+};
+
+/**
+ * fetch主要有两个客户端：
+ * 1. app
+ *    所有应用请求都通过app url进行访问
+ * 
+ * 2. server
+ *    服务端首页(console)通过server url进行访问，后续获取config和上报ready事件都
+ *    通过server url上报
+ * 
+ * 3. ide
+ *    开发环境通过ide url进行访问
+ * @param {} event 
+ * @returns 
+ */
 const handleFetch = async event => {
     const url = new URL(event.request.url);
 
@@ -76,31 +140,60 @@ const handleFetch = async event => {
     const port = url.port;
     const path = url.pathname;
 
+    await updateConfig();
+
     const scope = new URL(self.registration.scope);
 
     console.log(`service worker: fetch received ${event.request.url}, ${self.registration.scope}`)
 
-    const serverConfigUrl = joinUrl(scope, 'server/config');
+    const serverUrl = serverConfig.serverUrl;
 
-    const serverReadyUrl = joinUrl(scope, 'server/ready');
+    const serverConfigUrl = joinUrl(serverUrl, 'config');
 
-    const appUrl = joinUrl(scope, 'app');
+    const serverReadyUrl = joinUrl(serverUrl, 'ready');
 
+    const appUrl = serverConfig.appUrl;
 
     if (method === 'GET' && url.href === serverConfigUrl) {
-        return await self.caches.match(event.request);
+        return new Response(JSON.stringify(serverConfig), {
+            status: 2000,
+            headers: {
+                'Content-Type': 'application/json',
+            }
+        })
     } else if (method === 'GET' && url.href === serverReadyUrl) {
         if (!serverEndPoint) {
             const client = await self.clients.get(event.clientId);
             serverEndPoint = clientEndPoint(client);
+            serverWrapper = Comlink.wrap(serverEndPoint);
         }
         serverEndPoint.lastUpdateTime = Date.now(); // epoch开始的毫秒数
         return new Response('Ok', {
             status: 200,
             headers: {
                 'Content-Type': 'text/plain; charset=utf-8',
-            }
+            },
         });
+    } else if (method === 'GET' && url.href.startsWith(serverUrl)) {
+        return await caches.match(request);
+    } else if (url.href.startsWith(appUrl)) {
+        const now = Date.now();
+        if (!serverEndPoint || now > serverEndPoint.lastUpdateTime + 10*1000) {
+            return new Response("Server not Started", {
+                status: 500,
+                headers: {
+                    'Content-Type': 'text/plain; charset=utf-8',
+                },
+            })
+        }
+        const req = getRequest(event);
+        const res = await serverWrapper.handleRequest(req);
+        return new Response(res.body, {
+            status: res.status,
+            headers: res.headers,
+        });
+    } else {
+        return await caches.match(request);
     }
 
 
@@ -279,45 +372,6 @@ const buildScope = async (request) => {
         state,
     }
     return scope;
-}
-
-const pingForever = async (w) => {
-    await w.ping();
-
-    setTimeout(()=>pingForever(w), 5000);
-}
-
-const getRequest = async event => {
-    const url = new URL(event.request.url);
-    const method = event.request.method;
-    const scheme = url.protocol.slice(0, -1);
-    const server = url.hostname;
-    const port = url.port;
-    const path = url.pathname;
-    const query = url.search ? url.search.slice(1) : '';
-    const headers = {};
-    for (const [k, v] of event.request.headers) {
-        if (k in headers) {
-            headers[k] += ','+v;
-        } else {
-            headers[k] = v;
-        }
-    }
-    const body = await request.arrayBuffer();
-
-    let request = {
-        method,
-        scheme,
-        server,
-        port,
-        path,
-        query,
-        headers,
-        body
-    };
-    
-    request = Comlink.transfer(request, [request.body]);
-    return request;
 }
 
 const handleFetch1 = async event => {
