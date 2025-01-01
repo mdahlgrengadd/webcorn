@@ -21,6 +21,7 @@ const start = async (projectRoot, appSpec) => {
     pyodide.globals.get('load')(projectRoot, appSpec);
     isWsgi = pyodide.globals.get('is_wsgi');
     started = true;
+    return isWsgi;
 }
 
 const handleRequest = request => {
@@ -34,5 +35,6 @@ const handleRequest = request => {
 
 Comlink.expose({
     start,
+    isWsgi,
     handleRequest,
 })

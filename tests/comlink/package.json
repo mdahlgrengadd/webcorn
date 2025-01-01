@@ -1,0 +1,21 @@
+{
+  "name": "comlink-test",
+  "version": "0.1.0",
+  "description": "test comlink",
+  "type": "module",
+  "scripts": {
+    "start": "cd dist && python -m http.server",
+    "build": "rollup -c"
+  },
+  "keywords": [],
+  "author": "zenkj",
+  "license": "MIT",
+  "dependencies": {
+    "comlink": "^4.4.2"
+  },
+  "devDependencies": {
+    "@rollup/plugin-commonjs": "^28.0.2",
+    "@rollup/plugin-node-resolve": "^16.0.0",
+    "rollup": "^4.28.1"
+  }
+}
