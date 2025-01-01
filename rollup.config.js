@@ -11,13 +11,30 @@ export default [
                 format: 'es'
             },
         ],
+        plugins: [
+            resolve(),
+            commonjs(),
+            copy({
+                targets: [
+                    {src: 'public/*', dest: 'dist'},
+                ]
+            }),
+        ]
+    },
+    {
+        input: 'src/worker.js',
+        output: [
+            {
+                file: 'dist/server/worker.mjs',
+                format: 'es'
+            },
+        ],
         external: ['./pyodide.mjs', './pyodide.asm.js'],
         plugins: [
             resolve(),
             commonjs(),
             copy({
                 targets: [
-                    {src: 'public/*.*', dest: 'dist'},
                     {src: 'node_modules/pyodide/pyodide*', dest: 'dist/server'},
                     {src: 'node_modules/pyodide/python_stdlib.zip', dest: 'dist/server'},
                 ]

@@ -79,7 +79,7 @@ const updateConfig = async () => {
             appUrl: joinUrl(scope, 'app'),
             serverUrl: joinUrl(scope, 'server'),
             staticRoot: './static/',
-            static_url: joinUrl(scope, 'app/static'),
+            staticUrl: joinUrl(scope, 'app/static'),
         };
     }
 }
@@ -154,6 +154,8 @@ const handleFetch = async event => {
 
     const appUrl = serverConfig.appUrl;
 
+    const staticUrl = serverConfig.staticUrl;
+
     if (method === 'GET' && url.href === serverConfigUrl) {
         return new Response(JSON.stringify(serverConfig), {
             status: 2000,
@@ -175,7 +177,9 @@ const handleFetch = async event => {
             },
         });
     } else if (method === 'GET' && url.href.startsWith(serverUrl)) {
-        return await caches.match(request);
+        return await caches.match(event.request);
+    } else if (url.href.startsWith(staticUrl)) {
+        // TODO handle static files
     } else if (url.href.startsWith(appUrl)) {
         const now = Date.now();
         if (!serverEndPoint || now > serverEndPoint.lastUpdateTime + 10*1000) {
