@@ -9,12 +9,16 @@ from pathlib import Path
 from io import BytesIO
 import pyodide
 from pyodide.http import pyfetch
-from pyodide.ffi import to_py
+from pyodide.ffi import to_js
+from js import Object
+from platform import python_implementation
 
+version = '0.1.0'
 application = None
 is_wsgi = True
 is_asgi = False
 app_root = ''
+server_version = f'Webcorn/{version} {python_implementation()}/{sys.version.split()[0]}'
 
 def is_wsgi_app(app):
     # 检查对象是否可调用
@@ -73,7 +77,10 @@ def is_asgi_app(app):
         return True
     return False
 
-def add_app_syspaths(project_root, app_spec):
+def setup(project_root, app_spec, app_url):
+    global app_root
+    _origin, _, root_path = app_url.partition('/')
+    app_root = '/' + root_path if root_path else ''
     os.chdir(project_root)
     fspath, _, _ = app_spec.rpartition('/')
     if not fspath:
@@ -86,9 +93,9 @@ def add_app_syspaths(project_root, app_spec):
             sys.path.insert(0, p)
     return syspaths
 
-def load_app(project_root, app_spec):
-    global application, is_wsgi, is_asgi, app_root
-    add_app_syspaths(project_root, app_spec)
+def load_app(project_root, app_spec, app_url):
+    global application, is_wsgi, is_asgi
+    setup(project_root, app_spec, app_url)
     _, _, apppath = app_spec.rpartition('/')
     pypath, _, appname = apppath.partition(':')
     if not pypath:
@@ -124,12 +131,12 @@ def load_app(project_root, app_spec):
     if not is_wsgi and not is_asgi:
         raise RuntimeError(f"app object should be wsgi app or asgi app")
     application = instance
-    app_root = ''
 
-def build_environ(request):
+def build_environ(request, stderr):
     pathname = request['pathname']
     if pathname.startswith(app_root):
         pathname = pathname[len(app_root):]
+    stdin = BytesIO(request['body'])
     environ = {
         'REQUEST_METHOD': request['method'],
         'SCRIPT_NAME': app_root,
@@ -137,13 +144,13 @@ def build_environ(request):
         'QUERY_STRING': request['query_string'],
         'SERVER_NAME': request['hostname'],
         'SERVER_PORT': str(request['port']),
-        'SERVER_PROTOCOL': 'HTTP/0.1',
-        'wsgi.version': (0, 0),
+        'SERVER_PROTOCOL': 'HTTP/1.0',
+        'wsgi.version': (1, 0),
         'wsgi.url_scheme': request['scheme'],
-        'wsgi.input': BytesIO(request['body']),
-        'wsgi.errors': sys.stderr,
+        'wsgi.input': stdin,
+        'wsgi.errors': stderr,
         'wsgi.multithread': False,
-        'wsgi.multiprocess': False,
+        'wsgi.multiprocess': True,
         'wsgi.run_once': False,
     }
     headers = request['headers']
@@ -154,7 +161,7 @@ def build_environ(request):
     if 'content-length' in headers:
         environ['CONTENT_LENGTH'] = headers['content-length']
     else:
-        environ['CONTENT_LENGTH'] = ''
+        environ['CONTENT_LENGTH'] = str(len(request['body']))
 
     for k, v in headers:
         k = k.replace('-', '_').upper()
@@ -168,10 +175,66 @@ def build_environ(request):
             environ[k] = v
     return environ
 
-def run_wsgi(request):
-    request = to_py(request)
-    environ = build_environ(request)
+class ErrorStream:
+    def __init__(self, console):g
+        this.console = console
+
+    def flush(self):
+        pass
+
+    def write(msg):
+        this.console.log(msg)
+
+    def writelines(msgs):
+        for msg in msgs:
+            this.console.log(msg)
+
+
+def run_wsgi(request, console):
+    request = request.to_py()
+    stdout = BytesIO()
+    stderr = ErrorStream(console)
+    environ = build_environ(request, stderr)
+    
+    options = {
+        'status': 0,
+        'headers': {
+            'server': server_version,
+        },
+    }
+
+    def start_response(status, headers, exc_info=None):
+        if options['status'] != 0 and not exc_info:
+            raise AssertionError("Headers already set")
+        code, msg = status.split(None, 1)
+        options['status'] = int(code)
+        oheaders = options['headers']
+        for k, v in headers:
+            k = k.lower()
+            v = v.strip()
+            if k in oheaders:
+                oheaders[k] += ',' + v
+            else:
+                oheaders[k] = v
+        return stdout.write
+
+    try:
+        app_iter = application(environ, start_response)
+        for data in app_iter:
+            stdout.write(data)
+    except Exception as e:
+        raise
+    finally:
+        if app_iter and hasattr(app_iter, 'close'):
+            app_iter.close()
+
+    return to_js({
+        'status': options['status'],
+        'headers': options['headers'],
+        'body': stdout.getbuffer(),
+    }, dict_convertor=Object.fromEntries)
+
 
 async def run_asgi(request):
-    request = to_py(request)
+    request = request.to_py()
     pass

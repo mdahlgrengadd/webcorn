@@ -11,7 +11,7 @@ let isAsgi = false;
 let pyodide;
 let console = self.console;
 
-const start = async (projectRoot, appSpec, logger) => {
+const start = async (projectRoot, appSpec, appUrl, logger) => {
     console = logger;
     let begin = performance.now();
     console.log("loading pyodide");
@@ -21,7 +21,7 @@ const start = async (projectRoot, appSpec, logger) => {
     const response = await fetch("webcorn.py");
     const text = await response.text();
     await pyodide.runPythonAsync(text);
-    pyodide.globals.get('load_app')(projectRoot, appSpec);
+    pyodide.globals.get('load_app')(projectRoot, appSpec, appUrl);
     isWsgi = pyodide.globals.get('is_wsgi');
     isAsgi = pyodide.globals.get('is_asgi');
     started = true;
@@ -43,7 +43,7 @@ const handleRequest = async (request) => {
 
     response.body = "server internal error";
     if (isWsgi) {
-        response = pyodide.globals.get('run_wsgi')(request);
+        response = pyodide.globals.get('run_wsgi')(request, console);
     } else if (isAsgi) {
         response = await pyodide.globals.get('run_asgi')(request);
     }

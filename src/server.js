@@ -22,9 +22,10 @@ const webcornConfig = await response.json();
 const consoleDom = document.getElementById('console');
 
 class WebcornWorker {
-    constructor(projectRoot, appSpec) {
+    constructor(projectRoot, appSpec, appUrl) {
         this.projectRoot = projectRoot;
         this.appSec = appSpec;
+        this.appUrl = appUrl;
         this.name = projectRoot;
     }
 
@@ -44,7 +45,7 @@ class WebcornWorker {
     async start() {
         this.worker = new Worker(serverUrl('worker.mjs'), {type: 'module', name: this.name});
         this.wrapper = Comlink.wrap(this.worker);
-        this.isWsgi = await this.wrapper.start(this.projectRoot, this.appSpec, this.getLogger());
+        this.isWsgi = await this.wrapper.start(this.projectRoot, this.appSpec, this.appUrl, this.getLogger());
         this.maxCount = this.isWsgi ? 1 : 100;
         this.activeCount = 0;
     }
@@ -83,7 +84,7 @@ const retainWorker = async () => {
     }
     worker = null;
     try {
-        worker = new WebcornWorker(webcornConfig.projectRoot, webcornConfig.appSpec);
+        worker = new WebcornWorker(webcornConfig.projectRoot, webcornConfig.appSpec, webcornConfig.appUrl);
         await worker.start();
         workers.push(worker);
         worker.retain();
