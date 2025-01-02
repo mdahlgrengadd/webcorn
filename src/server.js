@@ -14,23 +14,39 @@ function serviceWorkerEndPoint() {
 
 const webcornEndPoint = serviceWorkerEndPoint();
 
-const response = await fetch(new URL('config', location.href));
+const serverUrl = (path) => new URL(path, location.href);
+
+const  response = await fetch(serverUrl('config'));
 const webcornConfig = await response.json();
+
+const consoleDom = document.getElementById('console');
 
 class WebcornWorker {
     constructor(projectRoot, appSpec) {
         this.projectRoot = projectRoot;
         this.appSec = appSpec;
-        this.started = false;
+        this.name = projectRoot;
+    }
+
+    getLogger() {
+        return Comlink.proxy({
+            log: (msg) => {
+                const p = document.createElement('p');
+                p.innerHTML = `<span class="source">${this.name}</span>`;
+                const content = document.createElement('span');
+                content.textContent = msg;
+                p.appendChild(content);
+                consoleDom.append(p);
+            }
+        });
     }
 
     async start() {
-        this.worker = new Worker('./worker.mjs', {type: 'module'});
+        this.worker = new Worker(serverUrl('worker.mjs'), {type: 'module', name: this.name});
         this.wrapper = Comlink.wrap(this.worker);
-        this.isWsgi = await this.wrapper.start(this.projectRoot, this.appSpec);
+        this.isWsgi = await this.wrapper.start(this.projectRoot, this.appSpec, this.getLogger());
         this.maxCount = this.isWsgi ? 1 : 100;
         this.activeCount = 0;
-        this.started = true;
     }
 
     async handleRequest(request) {
@@ -76,6 +92,7 @@ const retainWorker = async () => {
         // TODO do something?
     }
 };
+
 
 const handleRequest = async (request) => {
     let worker;

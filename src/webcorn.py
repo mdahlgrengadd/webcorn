@@ -4,14 +4,16 @@ from importlib import import_module
 from collections import Iterable
 import inspect
 import sys
+import os
 from pathlib import Path
 from io import BytesIO
 import pyodide
 from pyodide.http import pyfetch
 from pyodide.ffi import to_py
 
-app = None
+application = None
 is_wsgi = True
+is_asgi = False
 app_root = ''
 
 def is_wsgi_app(app):
@@ -71,7 +73,8 @@ def is_asgi_app(app):
         return True
     return False
 
-def add_app_syspaths(app_spec):
+def add_app_syspaths(project_root, app_spec):
+    os.chdir(project_root)
     fspath, _, _ = app_spec.rpartition('/')
     if not fspath:
         syspaths = [Path('.').resolve(), Path('src').resolve()]
@@ -83,8 +86,9 @@ def add_app_syspaths(app_spec):
             sys.path.insert(0, p)
     return syspaths
 
-def load_app(app_spec):
-    add_app_syspaths()
+def load_app(project_root, app_spec):
+    global application, is_wsgi, is_asgi, app_root
+    add_app_syspaths(project_root, app_spec)
     _, _, apppath = app_spec.rpartition('/')
     pypath, _, appname = apppath.partition(':')
     if not pypath:
@@ -119,7 +123,8 @@ def load_app(app_spec):
     is_asgi = is_asgi_app(instance)
     if not is_wsgi and not is_asgi:
         raise RuntimeError(f"app object should be wsgi app or asgi app")
-    return instance, is_wsgi
+    application = instance
+    app_root = ''
 
 def build_environ(request):
     pathname = request['pathname']
@@ -168,4 +173,5 @@ def run_wsgi(request):
     environ = build_environ(request)
 
 async def run_asgi(request):
+    request = to_py(request)
     pass
