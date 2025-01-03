@@ -16,7 +16,8 @@ export default [
             commonjs(),
             copy({
                 targets: [
-                    {src: 'public/*', dest: 'dist'},
+                    {src: 'public/style.css', dest: 'dist'},
+                    {src: 'public/server', dest: 'dist'},
                 ]
             }),
         ]

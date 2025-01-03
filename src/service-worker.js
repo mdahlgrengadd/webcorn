@@ -201,48 +201,6 @@ const handleFetch = async event => {
     }
 
 
-    if (path.startsWith('/webcorn/') && path.endsWith('/__start')){
-        const app = path.slice('/webcorn/'.length, -'/__start'.length);
-        console.log(`service worker: register webcorn server ${app}`);
-    } else if (path === '/webcorn/webcorn.mjs') {
-        console.log(`service worker: start webcorn server ${app}`);
-        return await fetch(path);
-    } else if (path === '/webcorn/server') {
-        console.log(`create webcorn-server`);
-        const body = `
-        <a href="/webcorn/foo">/webcore/foo</a>
-        <a href="/foo">/foo</a>
-        <script src="/webcorn-server.js"></script>
-        `;
-        return new Response(body, {
-                status: 200,
-                headers: {
-                    'Content-Type': 'text/html; charset=utf-8',
-                }
-            }
-        );
-    } else if (path === '/webcorn/project_wsgi') {
-        /*
-        const body = `
-        <h1>/webcorn/project_wsgi</h1>
-        <div>创建两个worker！</div>
-        <script>
-            const worker1 = new Worker('/webcorn/webcorn.mjs', {type: 'module', name: 'wsgi.worker1-from-service.worker'});
-            worker1.postMessage({type: 'webcorn.start', appRoot: '/webcorn/project_wsgi'});
-            const worker2 = new Worker('/webcorn.mjs', {type: 'module', name: 'wsgi.worker2-from-service.worker'});
-            worker2.postMessage({type: 'webcorn.start', appRoot: '/webcorn/project_wsgi'});
-        </script>
-        `;
-        */
-        const body = '<h1>Hello project_wsgi</h1>'
-        return new Response(body, {
-            status: 200,
-            headers: {
-                'Content-Type': 'text/html; charset=utf-8',
-            }
-        })
-    }
-
     return new Response(`OKK: ${path}`, {
         status: 200,
         headers: {
