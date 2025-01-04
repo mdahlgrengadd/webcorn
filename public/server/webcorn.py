@@ -3,11 +3,11 @@ from asyncio import iscoroutinefunction
 from importlib import import_module
 from pathlib import Path
 from urllib.parse import urljoin
-from collections import Iterable
+from collections.abc import Iterable
 import inspect
 import sys
 import os
-from io import BytesIO
+from io import BytesIO, StringIO
 from pyodide.ffi import to_js
 from pyodide.http import pyfetch
 from js import Object
@@ -40,8 +40,8 @@ def is_wsgi_app(app):
             'PATH_INFO': '/',
             'wsgi.version': (1, 0),
             'wsgi.url_scheme': 'http',
-            'wsgi.input': '',
-            'wsgi.errors': '',
+            'wsgi.input': BytesIO(),
+            'wsgi.errors': StringIO(),
             'wsgi.multithread': False,
             'wsgi.multiprocess': False,
             'wsgi.run_once': False,
@@ -49,20 +49,20 @@ def is_wsgi_app(app):
         
         # 简单的 start_response 函数
         def start_response(status, headers):
-            pass
+            return lambda b: len(b)
         
         # 尝试调用应用
         result = app(environ, start_response)
         result = isinstance(result, Iterable)
         return result
-    except:
+    except Exception as e:
         pass
     return False
 
 
 def is_async_callable(obj):
     while isinstance(obj, partial):
-        obj = obj.functools
+        obj = obj.func
     return (iscoroutinefunction(obj) or 
             (callable(obj) and
              iscoroutinefunction(obj.__call__)))
@@ -79,10 +79,9 @@ def is_asgi_app(app):
 
 async def ensure_project(project_root, app_url):
     path = Path(project_root)
-    if path.exists():
+    if path.is_dir():
         return
     zipurl = urljoin(app_url, f'../{path.name}.zip')
-    print(zipurl)
     response = await pyfetch(zipurl);
     await response.unpack_archive(extract_dir=path.parent)
 
@@ -143,7 +142,7 @@ async def load_app(project_root, app_spec, app_url):
     application = instance
 
 def build_environ(request, stderr):
-    pathname = request['pathname']
+    pathname = request['path']
     if pathname.startswith(app_root):
         pathname = pathname[len(app_root):]
     stdin = BytesIO(request['body'])
@@ -151,8 +150,8 @@ def build_environ(request, stderr):
         'REQUEST_METHOD': request['method'],
         'SCRIPT_NAME': app_root,
         'PATH_INFO': pathname,
-        'QUERY_STRING': request['query_string'],
-        'SERVER_NAME': request['hostname'],
+        'QUERY_STRING': request['query'],
+        'SERVER_NAME': request['server'],
         'SERVER_PORT': str(request['port']),
         'SERVER_PROTOCOL': 'HTTP/1.0',
         'wsgi.version': (1, 0),
@@ -173,7 +172,7 @@ def build_environ(request, stderr):
     else:
         environ['CONTENT_LENGTH'] = str(len(request['body']))
 
-    for k, v in headers:
+    for k, v in headers.items():
         k = k.replace('-', '_').upper()
         v = v.strip()
         if k in environ:
@@ -202,6 +201,7 @@ class ErrorStream:
 
 def run_wsgi(request, console):
     request = request.to_py()
+    print(request)
     stdout = BytesIO()
     stderr = ErrorStream(console)
     environ = build_environ(request, stderr)
@@ -233,16 +233,17 @@ def run_wsgi(request, console):
         for data in app_iter:
             stdout.write(data)
     except Exception as e:
+        print(e)
         raise
     finally:
         if app_iter and hasattr(app_iter, 'close'):
             app_iter.close()
-
-    return to_js({
+    result = to_js({
         'status': options['status'],
         'headers': options['headers'],
-        'body': stdout.getbuffer(),
-    }, dict_convertor=Object.fromEntries)
+        'body': 'hello', #stdout.getbuffer(),
+    }, dict_converter=Object.fromEntries)
+    return result
 
 
 async def run_asgi(request):

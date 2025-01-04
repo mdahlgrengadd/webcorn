@@ -83,6 +83,7 @@ self.addEventListener('message', async event => {
             const pingPort = event.ports[0];
             const requestPort = event.ports[1];
             const ping = () => {
+                console.log('service worker message: ping from server');
                 webcornServer.lastUpdateTime = Date.now();
             }
             Comlink.expose({ping}, pingPort);
@@ -101,14 +102,12 @@ let serverConfig;
 const updateConfig = async () => {
     if (!serverConfig) {
         const scope = self.registration.scope;
-        console.log(scope);
         const response = await self.caches.match(joinUrl(scope, 'config'));
         serverConfig = await response.json();
         serverConfig.appUrl = joinUrl(scope, serverConfig.appUrl);
         serverConfig.serverUrl = joinUrl(scope, serverConfig.serverUrl);
         serverConfig.staticUrl = joinUrl(scope, serverConfig.staticUrl);
     }
-    console.log(serverConfig);
 }
 
 const getRequest = async (event) => {
@@ -143,6 +142,32 @@ const getRequest = async (event) => {
     Comlink.transfer(request, [request.body]);
     return request;
 };
+
+const putInCache = async (req, res) => {
+    console.log("put in cache");
+    const cache = await caches.open(currentVersion);
+    await cache.put(req, res)
+}
+
+const cacheFirst = async (req) => {
+    const res = await caches.match(req);
+    if (res) {
+        console.log("response from cache");
+        return res;
+    }
+
+    try {
+        const newres = await fetch(req);
+        putInCache(req, newres.clone())
+        return newres;
+    } catch (err) {
+        return new Response("Network error!!!", {
+            status: 408,
+            headers: {"Content-Type": "text/plain; charset=utf-8"},
+        });
+    }
+}
+
 
 /**
  * fetch主要有两个客户端：
@@ -191,8 +216,10 @@ const handleFetch = async event => {
     } else if (url.href.startsWith(staticUrl)) {
         // TODO handle static files
     } else if (url.href.startsWith(appUrl)) {
+        console.log('service worker: app request')
         const now = Date.now();
         if (!webcornServer || now > webcornServer.lastUpdateTime + 10*1000) {
+            console.log(`server not started: ${webcornServer}`)
             return new Response("Server not Started", {
                 status: 500,
                 headers: {
@@ -207,7 +234,7 @@ const handleFetch = async event => {
             headers: res.headers,
         });
     } else {
-        return await caches.match(request);
+        return await cacheFirst(event.request);
     }
 
 

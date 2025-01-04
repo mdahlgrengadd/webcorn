@@ -12,7 +12,7 @@ let pyodide;
 let console = self.console;
 
 const start = async (projectRoot, appSpec, appUrl, logger) => {
-    console = logger;
+    //console = logger;
     let begin = performance.now();
     console.log("loading pyodide");
     pyodide = await loadPyodide();
@@ -42,11 +42,17 @@ const handleRequest = async (request) => {
     }
 
     response.body = "server internal error";
-    if (isWsgi) {
-        response = pyodide.globals.get('run_wsgi')(request, console);
-    } else if (isAsgi) {
-        response = await pyodide.globals.get('run_asgi')(request);
+    try {
+        if (isWsgi) {
+            response = pyodide.globals.get('run_wsgi')(request, console);
+            console.log('worker: received response from python run_wsgi')
+        } else if (isAsgi) {
+            response = await pyodide.globals.get('run_asgi')(request);
+        }
+    } catch (e) {
+        console.log(e);
     }
+    console.log(response);
     Comlink.transfer(response, [response.body]);
     return response;
 }
