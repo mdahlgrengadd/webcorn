@@ -43,6 +43,17 @@ self.addEventListener('install', async e => {
             joinUrl(scope, 'config'),
             joinUrl(scope, 'server/index.html'),
             joinUrl(scope, 'server/index.mjs'),
+            joinUrl(scope, 'server/worker.mjs'),
+            joinUrl(scope, 'server/webcorn.py'),
+            joinUrl(scope, 'server/pyodide-lock.json'),
+            joinUrl(scope, 'server/pyodide.asm.js'),
+            joinUrl(scope, 'server/pyodide.asm.wasm'),
+            joinUrl(scope, 'server/pyodide.d.ts'),
+            joinUrl(scope, 'server/pyodide.js'),
+            joinUrl(scope, 'server/pyodide.js.map'),
+            joinUrl(scope, 'server/pyodide.mjs'),
+            joinUrl(scope, 'server/pyodide.mjs.map'),
+            joinUrl(scope, 'server/python_stdlib.zip'),
         ])
     )
     //await self.skipWaiting();
@@ -61,27 +72,43 @@ self.addEventListener('activate', async event => {
     //await self.clients.claim();
 });
 
-self.addEventListener('fetch', async e => {
-    e.respondWith(handleFetch(e));
+self.addEventListener('message', async event => {
+    const data = event.data;
+    console.log(data);
+    if (data.type === 'server-ready') {
+        if (!webcornServer) {
+            webcornServer = {
+                lastUpdateTime: Date.now(),
+            };
+            const pingPort = event.ports[0];
+            const requestPort = event.ports[1];
+            const ping = () => {
+                webcornServer.lastUpdateTime = Date.now();
+            }
+            Comlink.expose({ping}, pingPort);
+            webcornServer.endpoint = Comlink.wrap(requestPort);
+        }
+    }
+})
+
+self.addEventListener('fetch', async event => {
+    event.respondWith(handleFetch(event));
 });
 
-let serverEndPoint;
-let serverWrapper;
+let webcornServer;
 let serverConfig;
 
 const updateConfig = async () => {
     if (!serverConfig) {
         const scope = self.registration.scope;
+        console.log(scope);
         const response = await self.caches.match(joinUrl(scope, 'config'));
-        serverConfig = await response.json() || {
-            projectRoot: './',
-            appSpec: '',
-            appUrl: joinUrl(scope, 'app'),
-            serverUrl: joinUrl(scope, 'server'),
-            staticRoot: './static/',
-            staticUrl: joinUrl(scope, 'app/static'),
-        };
+        serverConfig = await response.json();
+        serverConfig.appUrl = joinUrl(scope, serverConfig.appUrl);
+        serverConfig.serverUrl = joinUrl(scope, serverConfig.serverUrl);
+        serverConfig.staticUrl = joinUrl(scope, serverConfig.staticUrl);
     }
+    console.log(serverConfig);
 }
 
 const getRequest = async (event) => {
@@ -100,7 +127,7 @@ const getRequest = async (event) => {
             headers[k] = v;
         }
     }
-    const body = await request.arrayBuffer();
+    const body = await event.request.arrayBuffer();
 
     let request = {
         method,
@@ -113,7 +140,7 @@ const getRequest = async (event) => {
         body
     };
     
-    request = Comlink.transfer(request, [request.body]);
+    Comlink.transfer(request, [request.body]);
     return request;
 };
 
@@ -142,15 +169,11 @@ const handleFetch = async event => {
 
     await updateConfig();
 
-    const scope = new URL(self.registration.scope);
-
-    console.log(`service worker: fetch received ${event.request.url}, ${self.registration.scope}`)
+    console.log(`service worker: fetch received: ${event.request.url}`);
 
     const serverUrl = serverConfig.serverUrl;
 
     const serverConfigUrl = joinUrl(serverUrl, 'config');
-
-    const serverReadyUrl = joinUrl(serverUrl, 'ready');
 
     const appUrl = serverConfig.appUrl;
 
@@ -158,31 +181,18 @@ const handleFetch = async event => {
 
     if (method === 'GET' && url.href === serverConfigUrl) {
         return new Response(JSON.stringify(serverConfig), {
-            status: 2000,
+            status: 200,
             headers: {
                 'Content-Type': 'application/json',
             }
         })
-    } else if (method === 'GET' && url.href === serverReadyUrl) {
-        if (!serverEndPoint) {
-            const client = await self.clients.get(event.clientId);
-            serverEndPoint = clientEndPoint(client);
-            serverWrapper = Comlink.wrap(serverEndPoint);
-        }
-        serverEndPoint.lastUpdateTime = Date.now(); // epoch开始的毫秒数
-        return new Response('Ok', {
-            status: 200,
-            headers: {
-                'Content-Type': 'text/plain; charset=utf-8',
-            },
-        });
     } else if (method === 'GET' && url.href.startsWith(serverUrl)) {
         return await caches.match(event.request);
     } else if (url.href.startsWith(staticUrl)) {
         // TODO handle static files
     } else if (url.href.startsWith(appUrl)) {
         const now = Date.now();
-        if (!serverEndPoint || now > serverEndPoint.lastUpdateTime + 10*1000) {
+        if (!webcornServer || now > webcornServer.lastUpdateTime + 10*1000) {
             return new Response("Server not Started", {
                 status: 500,
                 headers: {
@@ -190,8 +200,8 @@ const handleFetch = async event => {
                 },
             })
         }
-        const req = getRequest(event);
-        const res = await serverWrapper.handleRequest(req);
+        const req = await getRequest(event);
+        const res = await webcornServer.endpoint.handleRequest(req);
         return new Response(res.body, {
             status: res.status,
             headers: res.headers,
@@ -208,33 +218,6 @@ const handleFetch = async event => {
         }
     });
 
-    
-    /*
-    if (!worker) {
-        const scope = registration.scope;
-        const root_path = new URL(scope).pathname;
-        worker = new Worker('/webcorn.js', {type: 'module'});
-        worker = Comlink.wrap(worker);
-        worker.start(root_path);
-        await pingForever(worker);
-    }
-    let data = {
-        method,
-        scheme,
-        hostname,
-        port,
-        path,
-        query_string,
-        headers,
-        body
-    };
-    data = Comlink.transfer(data, [data.body]);
-    result = await worker.run(data);
-    return new Response(result.body, {
-        status: result.status,
-        headers: result.headers
-    });
-    */
 }
 
 

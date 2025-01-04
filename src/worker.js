@@ -21,7 +21,7 @@ const start = async (projectRoot, appSpec, appUrl, logger) => {
     const response = await fetch("webcorn.py");
     const text = await response.text();
     await pyodide.runPythonAsync(text);
-    pyodide.globals.get('load_app')(projectRoot, appSpec, appUrl);
+    await pyodide.globals.get('load_app')(projectRoot, appSpec, appUrl);
     isWsgi = pyodide.globals.get('is_wsgi');
     isAsgi = pyodide.globals.get('is_asgi');
     started = true;

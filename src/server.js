@@ -1,19 +1,5 @@
 import * as Comlink from "comlink";
 
-function serviceWorkerEndPoint() {
-    const serviceWorkerContainer = navigator.serviceWorker;
-    if ('controller' in serviceWorkerContainer) {
-        const serviceWorker = serviceWorkerContainer.controller;
-        return {
-            addEventListener: serviceWorkerContainer.addEventListener.bind(serviceWorkerContainer),
-            removeEventListener: serviceWorkerContainer.removeEventListener.bind(serviceWorkerContainer),
-            postMessage: serviceWorker.postMessage.bind(serviceWorker)
-        };
-    }
-}
-
-const webcornEndPoint = serviceWorkerEndPoint();
-
 const serverUrl = (path) => new URL(path, location.href);
 
 const  response = await fetch(serverUrl('config'));
@@ -23,17 +9,18 @@ const consoleDom = document.getElementById('console');
 
 class WebcornWorker {
     constructor(projectRoot, appSpec, appUrl) {
+        _, _, name = projectRoot.rpartition('/');
         this.projectRoot = projectRoot;
         this.appSec = appSpec;
         this.appUrl = appUrl;
-        this.name = projectRoot;
+        this.name = name;
     }
 
     getLogger() {
         return Comlink.proxy({
             log: (msg) => {
                 const p = document.createElement('p');
-                p.innerHTML = `<span class="source">${this.name}</span>`;
+                p.innerHTML = `<span class="source">${this.name}:</span>`;
                 const content = document.createElement('span');
                 content.textContent = msg;
                 p.appendChild(content);
@@ -94,7 +81,6 @@ const retainWorker = async () => {
     }
 };
 
-
 const handleRequest = async (request) => {
     let worker;
     try {
@@ -117,4 +103,15 @@ const handleRequest = async (request) => {
     }
 }
 
-Comlink.expose({ handleRequest }, webcornEndPoint);
+if (navigator.serviceWorker.controller) {
+    const { port1: pingPort1, port2: pingPort2 } = new MessageChannel();
+    const { port1: requestPort1, port2: requestPort2 } = new MessageChannel();
+    const pingTarget = Comlink.wrap(pingPort1);
+    const ping = async () => {
+        await pingTarget.ping();
+        setTimeout(ping, 1000);
+    }
+    ping();
+    Comlink.expose({ handleRequest }, requestPort1);
+    navigator.serviceWorker.controller.postMessage({type: 'server-ready'}, [pingPort2, requestPort2]);
+}

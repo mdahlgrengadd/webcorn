@@ -1,13 +1,15 @@
 from functools import partial
 from asyncio import iscoroutinefunction
 from importlib import import_module
+from pathlib import Path
+from urllib.parse import urljoin
 from collections import Iterable
 import inspect
 import sys
 import os
-from pathlib import Path
 from io import BytesIO
 from pyodide.ffi import to_js
+from pyodide.http import pyfetch
 from js import Object
 from platform import python_implementation
 
@@ -75,11 +77,20 @@ def is_asgi_app(app):
         return True
     return False
 
+async def ensure_project(project_root, app_url):
+    path = Path(project_root)
+    if path.exists():
+        return
+    zipurl = urljoin(app_url, f'../{path.name}.zip')
+    print(zipurl)
+    response = await pyfetch(zipurl);
+    await response.unpack_archive(extract_dir=path.parent)
+
 def setup(project_root, app_spec, app_url):
     global app_root
+    os.chdir(project_root)
     _origin, _, root_path = app_url.partition('/')
     app_root = '/' + root_path if root_path else ''
-    os.chdir(project_root)
     fspath, _, _ = app_spec.rpartition('/')
     if not fspath:
         syspaths = [Path('.').resolve(), Path('src').resolve()]
@@ -91,8 +102,9 @@ def setup(project_root, app_spec, app_url):
             sys.path.insert(0, p)
     return syspaths
 
-def load_app(project_root, app_spec, app_url):
+async def load_app(project_root, app_spec, app_url):
     global application, is_wsgi, is_asgi
+    await ensure_project(project_root, app_url)
     setup(project_root, app_spec, app_url)
     _, _, apppath = app_spec.rpartition('/')
     pypath, _, appname = apppath.partition(':')
