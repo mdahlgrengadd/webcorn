@@ -12,7 +12,7 @@ let pyodide;
 let console = self.console;
 
 const start = async (projectRoot, appSpec, appUrl, logger) => {
-    //console = logger;
+    console = logger;
     let begin = performance.now();
     console.log("loading pyodide");
     pyodide = await loadPyodide();
@@ -29,22 +29,24 @@ const start = async (projectRoot, appSpec, appUrl, logger) => {
 }
 
 const handleRequest = async (request) => {
+    const encoder = new TextEncoder();
     let response = {
         status: 500,
         headers: {
             'Content-Type': 'text/plain; charset=utf-8',
         },
-        body: "server not started",
+        body: encoder.encode("server not started").buffer,
     };
 
     if (!started) {
         return response;
     }
 
-    response.body = "server internal error";
+    response.body = encoder.encode("server internal error").buffer;
     try {
         if (isWsgi) {
             response = pyodide.globals.get('run_wsgi')(request, console);
+            response.body = response.body.buffer;
             console.log('worker: received response from python run_wsgi')
         } else if (isAsgi) {
             response = await pyodide.globals.get('run_asgi')(request);
@@ -52,7 +54,6 @@ const handleRequest = async (request) => {
     } catch (e) {
         console.log(e);
     }
-    console.log(response);
     Comlink.transfer(response, [response.body]);
     return response;
 }

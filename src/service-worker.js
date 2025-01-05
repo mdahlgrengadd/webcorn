@@ -155,10 +155,15 @@ const cacheFirst = async (req) => {
         console.log("response from cache");
         return res;
     }
+    
+    const url = new URL(req.url);
+    const scheme = url.protocol.slice(0, -1);
 
     try {
         const newres = await fetch(req);
-        putInCache(req, newres.clone())
+        if (scheme === 'https' || scheme === 'http') {
+            putInCache(req, newres.clone());
+        }
         return newres;
     } catch (err) {
         return new Response("Network error!!!", {

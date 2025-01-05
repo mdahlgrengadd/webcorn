@@ -5,9 +5,6 @@ const serverUrl = (path) => new URL(path, location.href);
 const  response = await fetch(serverUrl('config'));
 const webcornConfig = await response.json();
 
-console.log('server: webcornConfig:');
-console.log(webcornConfig);
-
 const consoleDom = document.getElementById('console');
 
 class WebcornWorker {
@@ -43,8 +40,6 @@ class WebcornWorker {
     async handleRequest(request) {
         Comlink.transfer(request, [request.body]);
         const response = await this.wrapper.handleRequest(request);
-        console.log('server received response from worker:')
-        console.log(response);
         Comlink.transfer(response, [response.body]);
         return response;
     }
@@ -88,8 +83,6 @@ const retainWorker = async () => {
 };
 
 const handleRequest = async (request) => {
-    console.log(`server received request:`);
-    console.log(request);
     let worker;
     try {
         worker = await retainWorker();

@@ -201,7 +201,6 @@ class ErrorStream:
 
 def run_wsgi(request, console):
     request = request.to_py()
-    print(request)
     stdout = BytesIO()
     stderr = ErrorStream(console)
     environ = build_environ(request, stderr)
@@ -241,7 +240,7 @@ def run_wsgi(request, console):
     result = to_js({
         'status': options['status'],
         'headers': options['headers'],
-        'body': 'hello', #stdout.getbuffer(),
+        'body': stdout.getbuffer(),
     }, dict_converter=Object.fromEntries)
     return result
 
