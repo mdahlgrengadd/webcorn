@@ -14,10 +14,10 @@ def config():
     return {
         'projectRoot': '/opt/project_wsgi',
         'appSpec': 'src/app:app',
-        'appUrl': 'app',
-        'serverUrl': 'server',
+        'appUrl': '/app',
+        'serverUrl': '/server',
         'staticRoot': '/opt/project_wsgi/static',
-        'staticUrl': 'app/static',
+        'staticUrl': '/app/static',
     }
 
 @app.get('/projects/project_wsgi.zip')

@@ -116,7 +116,11 @@ async def load_app(project_root, app_spec, app_url):
             module = import_module(p)
             pypath = p
             break
-        except Exception as e:
+        except ModuleNotFoundError as e:
+            if len(pypaths) == 1:
+                raise
+            if e.name != p:
+                raise
             module = None
     if not module:
         raise RuntimeError(f"Can't find app module")
@@ -132,6 +136,8 @@ async def load_app(project_root, app_spec, app_url):
             appname = name
             break
         except AttributeError:
+            if len(appnames) == 1:
+                raise
             instance = None
     if not instance:
         raise RuntimeError(f"Can't find app object from module {module}")
