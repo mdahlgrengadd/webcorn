@@ -1,12 +1,7 @@
-def app(environ, start_response):
-    print("wsgi app running")
-    status = "200 OK"
-    headers = [
-        ('Content-Type', 'text/plain'),
-        #('Content-Length', "14"),
-    ]
-    write = start_response(status, headers)
-    write(b"Hello ")
-    return [b"Webcorn!"]
+from flask import Flask, render_template
 
-is_wsgi = True
+def app = Flask(__name__)
+
+@app.get('/')
+def app():
+    return render_template('index.html', dynamic_value="hello from flask")
