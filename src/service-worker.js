@@ -35,6 +35,7 @@ self.addEventListener('install', async e => {
             joinUrl(scope, 'server/index.mjs'),
             joinUrl(scope, 'server/worker.mjs'),
             joinUrl(scope, 'server/webcorn.py'),
+            /*
             joinUrl(scope, 'server/pyodide-lock.json'),
             joinUrl(scope, 'server/pyodide.asm.js'),
             joinUrl(scope, 'server/pyodide.asm.wasm'),
@@ -44,6 +45,7 @@ self.addEventListener('install', async e => {
             joinUrl(scope, 'server/pyodide.mjs'),
             joinUrl(scope, 'server/pyodide.mjs.map'),
             joinUrl(scope, 'server/python_stdlib.zip'),
+            */
         ])
     )
     //await self.skipWaiting();
@@ -205,10 +207,10 @@ const handleFetch = async event => {
         })
     } else if (method === 'GET' && url.href.startsWith(serverUrl)) {
         return await caches.match(event.request);
-    } else if (url.href.startsWith(staticUrl)) {
-        // TODO handle static files
+    //} else if (url.href.startsWith(staticUrl)) {
+    //    // TODO handle static files
     } else if (url.href.startsWith(appUrl)) {
-        console.log('service worker: app request')
+        console.log('service worker: app request');
         const now = Date.now();
         if (!webcornServer || now > webcornServer.lastUpdateTime + 10*1000) {
             console.log(`server not started: ${webcornServer}`)

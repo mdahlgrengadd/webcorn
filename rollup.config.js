@@ -34,12 +34,14 @@ export default [
         plugins: [
             resolve(),
             commonjs(),
+            /*
             copy({
                 targets: [
                     {src: 'node_modules/pyodide/pyodide*', dest: 'dist/server'},
                     {src: 'node_modules/pyodide/python_stdlib.zip', dest: 'dist/server'},
                 ]
             }),
+            */
         ]
     },
     {

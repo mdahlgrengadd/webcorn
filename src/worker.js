@@ -1,7 +1,7 @@
 // This is the web worker main js that run the webcorn server
 import * as Comlink from "comlink";
 
-import { loadPyodide } from "./pyodide.mjs";
+import { loadPyodide } from "https://cdn.jsdelivr.net/npm/pyodide/pyodide.min.mjs";
 // 静态加载pyodide.asm.js，否则在loadPyodide时将会动态加载，在module类型service worker中不支持动态加载
 //import "./pyodide.asm.js";
 
@@ -18,6 +18,7 @@ const start = async (projectRoot, appSpec, appUrl, logger) => {
     pyodide = await loadPyodide();
     let end = performance.now();
     console.log(`loaded pyodide successfully in ${(end-begin).toFixed(2)}ms`);
+    await pyodide.loadPackage('micropip');
     const response = await fetch("webcorn.py");
     const text = await response.text();
     await pyodide.runPythonAsync(text);

@@ -2,7 +2,7 @@ from functools import partial
 from asyncio import iscoroutinefunction
 from importlib import import_module
 from pathlib import Path
-from urllib.parse import urljoin
+from urllib.parse import urlparse, urljoin
 from collections.abc import Iterable
 import inspect
 import sys
@@ -12,6 +12,7 @@ from pyodide.ffi import to_js
 from pyodide.http import pyfetch
 from js import Object
 from platform import python_implementation
+import micropip
 
 version = '0.1.0'
 application = None
@@ -21,6 +22,7 @@ app_root = ''
 server_version = f'Webcorn/{version} {python_implementation()}/{sys.version.split()[0]}'
 
 def is_wsgi_app(app):
+    print(app)
     # 检查对象是否可调用
     if not callable(app):
         return False
@@ -28,6 +30,7 @@ def is_wsgi_app(app):
     # 检查参数签名
     sig = inspect.signature(app)
     params = list(sig.parameters.keys())
+    print(params)
     # WSGI 应用的参数应该是 environ 和 start_response
     if len(params) != 2: # or params[0] != 'environ' or params[1] != 'start_response':
         return False
@@ -56,7 +59,7 @@ def is_wsgi_app(app):
         result = isinstance(result, Iterable)
         return result
     except Exception as e:
-        pass
+        print(e)
     return False
 
 
@@ -77,19 +80,43 @@ def is_asgi_app(app):
         return True
     return False
 
-async def ensure_project(project_root, app_url):
-    path = Path(project_root)
-    if path.is_dir():
-        return
-    zipurl = urljoin(app_url, f'../{path.name}.zip')
-    response = await pyfetch(zipurl);
-    await response.unpack_archive(extract_dir=path.parent)
 
-def setup(project_root, app_spec, app_url):
+async def install_dependencies(root):
+    requirements = root / 'requirements.txt'
+    if requirements.is_file():
+        with requirements.open('r') as f:
+            requirements = f.readlines()
+        requirements = [req.strip() for req in requirements if req.strip() and not req.startswith('#')]
+        for req in requirements:
+            await micropip.install(req)
+        return
+    pyproject = root / 'pyproject.toml'
+    if pyproject.is_file():
+        await micropip.install('toml')
+        import toml
+        pyproject = toml.load(pyproject)
+        project = pyproject.get('project')
+        if project:
+            deps = project.get('dependencies')
+            if deps:
+                for dep in deps:
+                    await micropip.install(dep)
+        return
+
+
+async def setup(project_root, app_spec, app_url):
     global app_root
+    path = Path(project_root)
+    if not path.is_dir():
+        zipurl = urljoin(app_url, f'../{path.name}.zip')
+        response = await pyfetch(zipurl)
+        await response.unpack_archive(extract_dir=path.parent)
     os.chdir(project_root)
-    _origin, _, root_path = app_url.partition('/')
-    app_root = '/' + root_path if root_path else ''
+
+    await install_dependencies(path)
+
+    app_url = urlparse(app_url)
+    app_root = app_url.path
     fspath, _, _ = app_spec.rpartition('/')
     if not fspath:
         syspaths = [Path('.').resolve(), Path('src').resolve()]
@@ -101,10 +128,10 @@ def setup(project_root, app_spec, app_url):
             sys.path.insert(0, p)
     return syspaths
 
+
 async def load_app(project_root, app_spec, app_url):
     global application, is_wsgi, is_asgi
-    await ensure_project(project_root, app_url)
-    setup(project_root, app_spec, app_url)
+    await setup(project_root, app_spec, app_url)
     _, _, apppath = app_spec.rpartition('/')
     pypath, _, appname = apppath.partition(':')
     if not pypath:
@@ -146,6 +173,7 @@ async def load_app(project_root, app_spec, app_url):
     if not is_wsgi and not is_asgi:
         raise RuntimeError(f"app object should be wsgi app or asgi app")
     application = instance
+
 
 def build_environ(request, stderr):
     pathname = request['path']
@@ -190,6 +218,7 @@ def build_environ(request, stderr):
             environ[k] = v
     return environ
 
+
 class ErrorStream:
     def __init__(self, console):
         self.console = console
@@ -210,7 +239,7 @@ def run_wsgi(request, console):
     stdout = BytesIO()
     stderr = ErrorStream(console)
     environ = build_environ(request, stderr)
-    
+
     options = {
         'status': 0,
         'headers': {

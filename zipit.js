@@ -20,5 +20,6 @@ const dozip = (dir) => {
     archive.finalize();
 }
 
-dozip('public/project_asgi');
-dozip('public/project_wsgi');
+dozip('public/project_django');
+dozip('public/project_flask');
+dozip('public/project_fastapi');
