@@ -75,7 +75,7 @@ self.addEventListener('message', async event => {
             const pingPort = event.ports[0];
             const requestPort = event.ports[1];
             const ping = () => {
-                console.log('service worker message: ping from server');
+                //console.log('service worker message: ping from server');
                 webcornServer.lastUpdateTime = Date.now();
             }
             Comlink.expose({ping}, pingPort);

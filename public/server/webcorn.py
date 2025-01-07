@@ -34,33 +34,34 @@ def is_wsgi_app(app):
     # WSGI 应用的参数应该是 environ 和 start_response
     if len(params) != 2: # or params[0] != 'environ' or params[1] != 'start_response':
         return False
+    return True
 
-    # 尝试调用应用，确保它不会抛出异常
-    try:
-        # 创建一个示例的 environ 对象
-        environ = {
-            'REQUEST_METHOD': 'GET',
-            'PATH_INFO': '/',
-            'wsgi.version': (1, 0),
-            'wsgi.url_scheme': 'http',
-            'wsgi.input': BytesIO(),
-            'wsgi.errors': StringIO(),
-            'wsgi.multithread': False,
-            'wsgi.multiprocess': False,
-            'wsgi.run_once': False,
-        }
-        
-        # 简单的 start_response 函数
-        def start_response(status, headers):
-            return lambda b: len(b)
-        
-        # 尝试调用应用
-        result = app(environ, start_response)
-        result = isinstance(result, Iterable)
-        return result
-    except Exception as e:
-        print(e)
-    return False
+    ## 尝试调用应用，确保它不会抛出异常
+    #try:
+    #    # 创建一个示例的 environ 对象
+    #    environ = {
+    #        'REQUEST_METHOD': 'GET',
+    #        'PATH_INFO': '/',
+    #        'wsgi.version': (1, 0),
+    #        'wsgi.url_scheme': 'http',
+    #        'wsgi.input': BytesIO(),
+    #        'wsgi.errors': StringIO(),
+    #        'wsgi.multithread': False,
+    #        'wsgi.multiprocess': False,
+    #        'wsgi.run_once': False,
+    #    }
+    #    
+    #    # 简单的 start_response 函数
+    #    def start_response(status, headers):
+    #        return lambda b: len(b)
+    #    
+    #    # 尝试调用应用
+    #    result = app(environ, start_response)
+    #    result = isinstance(result, Iterable)
+    #    return result
+    #except Exception as e:
+    #    print(e)
+    #return False
 
 
 def is_async_callable(obj):
@@ -104,6 +105,34 @@ async def install_dependencies(root):
         return
 
 
+def monkey_patch():
+    """django.url使用了asgiref.local.Local，其中依赖多线程，不可用，需要monkey patch"""
+    try:
+        import asgiref.local
+        class MyLocal:
+            def __init__(self, thread_critical=False):
+                print("init MyLocal")
+                self._inner_dict = {}
+            def __getattr__(self, key):
+                print(f"get MyLocal {key}")
+                if key in self._inner_dict:
+                    print(f"key: value = {key}: {self._inner_dict[key]}")
+                    return self._inner_dict[key]
+                raise AttributeError(f"{self.__class__.__name__}i has no attr {key}")
+            def __setattr__(self, key, value):
+                print(f"set MyLocal {key}: {value}")
+                if key == '_inner_dict':
+                    super().__setattr__(key, value)
+                else:
+                    self._inner_dict[key] = value
+            def __delattr__(self, key):
+                print(f"del MyLocal {key}")
+                del self._inner_dict[key]
+        asgiref.local.Local = MyLocal
+    except:
+        pass
+
+
 async def setup(project_root, app_spec, app_url):
     global app_root
     path = Path(project_root)
@@ -114,6 +143,8 @@ async def setup(project_root, app_spec, app_url):
     os.chdir(project_root)
 
     await install_dependencies(path)
+
+    monkey_patch()
 
     app_url = urlparse(app_url)
     app_root = app_url.path
@@ -127,6 +158,19 @@ async def setup(project_root, app_spec, app_url):
         if p not in sys.path:
             sys.path.insert(0, p)
     return syspaths
+
+
+def check_django(app):
+    """django开发态的静态文件处理比较特殊，需要在这里单独配置"""
+    try:
+        from django.conf import settings
+        if 'django.contrib.staticfiles' in settings.INSTALLED_APPS:
+            from django.contrib.staticfiles.handlers import StaticFilesHandler
+            return StaticFilesHandler(app)
+    except Exception:
+        pass
+    return app
+
 
 
 async def load_app(project_root, app_spec, app_url):
@@ -173,6 +217,7 @@ async def load_app(project_root, app_spec, app_url):
     if not is_wsgi and not is_asgi:
         raise RuntimeError(f"app object should be wsgi app or asgi app")
     application = instance
+    application = check_django(application)
 
 
 def build_environ(request, stderr):
@@ -239,6 +284,7 @@ def run_wsgi(request, console):
     stdout = BytesIO()
     stderr = ErrorStream(console)
     environ = build_environ(request, stderr)
+    print(environ)
 
     options = {
         'status': 0,

@@ -13,7 +13,7 @@ def index():
 def django_config():
     return {
         'projectRoot': '/opt/project_django',
-        'appSpec': 'project_django:application',
+        'appSpec': 'project_django.wsgi:application',
         'appUrl': '/app',
         'serverUrl': '/server',
         'staticRoot': '/opt/project_django/static',
