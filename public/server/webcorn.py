@@ -20,9 +20,9 @@ is_wsgi = True
 is_asgi = False
 app_root = ''
 server_version = f'Webcorn/{version} {python_implementation()}/{sys.version.split()[0]}'
+is_django = False
 
 def is_wsgi_app(app):
-    print(app)
     # 检查对象是否可调用
     if not callable(app):
         return False
@@ -30,7 +30,6 @@ def is_wsgi_app(app):
     # 检查参数签名
     sig = inspect.signature(app)
     params = list(sig.parameters.keys())
-    print(params)
     # WSGI 应用的参数应该是 environ 和 start_response
     if len(params) != 2: # or params[0] != 'environ' or params[1] != 'start_response':
         return False
@@ -105,34 +104,6 @@ async def install_dependencies(root):
         return
 
 
-def monkey_patch():
-    """django.url使用了asgiref.local.Local，其中依赖多线程，不可用，需要monkey patch"""
-    try:
-        import asgiref.local
-        class MyLocal:
-            def __init__(self, thread_critical=False):
-                print("init MyLocal")
-                self._inner_dict = {}
-            def __getattr__(self, key):
-                print(f"get MyLocal {key}")
-                if key in self._inner_dict:
-                    print(f"key: value = {key}: {self._inner_dict[key]}")
-                    return self._inner_dict[key]
-                raise AttributeError(f"{self.__class__.__name__}i has no attr {key}")
-            def __setattr__(self, key, value):
-                print(f"set MyLocal {key}: {value}")
-                if key == '_inner_dict':
-                    super().__setattr__(key, value)
-                else:
-                    self._inner_dict[key] = value
-            def __delattr__(self, key):
-                print(f"del MyLocal {key}")
-                del self._inner_dict[key]
-        asgiref.local.Local = MyLocal
-    except:
-        pass
-
-
 async def setup(project_root, app_spec, app_url):
     global app_root
     path = Path(project_root)
@@ -144,10 +115,16 @@ async def setup(project_root, app_spec, app_url):
 
     await install_dependencies(path)
 
-    monkey_patch()
-
     app_url = urlparse(app_url)
     app_root = app_url.path
+
+    try:
+        from django.urls import set_script_prefix
+        # 将app_root设置到thread local的_prefixes中
+        set_script_prefix(app_root)
+    except:
+        pass
+
     fspath, _, _ = app_spec.rpartition('/')
     if not fspath:
         syspaths = [Path('.').resolve(), Path('src').resolve()]
@@ -162,10 +139,28 @@ async def setup(project_root, app_spec, app_url):
 
 def check_django(app):
     """django开发态的静态文件处理比较特殊，需要在这里单独配置"""
+    global is_django
     try:
         from django.conf import settings
-        if 'django.contrib.staticfiles' in settings.INSTALLED_APPS:
-            from django.contrib.staticfiles.handlers import StaticFilesHandler
+        installed_apps = settings.INSTALLED_APPS
+        is_django = True
+        if 'django.contrib.staticfiles' in installed_apps:
+            from django.contrib.staticfiles.handlers import StaticFilesHandlerMixin
+            from django.core.handlers.wsgi import WSGIHandler, get_path_info, get_script_name
+            # staticfiles.StaticFilesHandler有bug
+            class StaticFilesHandler(StaticFilesHandlerMixin, WSGIHandler):
+                def __init__(self, application):
+                    self.application = application
+                    self.base_url = urlparse(self.get_base_url())
+                    super().__init__()
+
+                def __call__(self, environ, start_response):
+                    script_name = get_script_name(environ)
+                    path_info = get_path_info(environ) or '/'
+                    path = f'{script_name.rstrip("/")}/{path_info.replace("/", "", 1)}'
+                    if not self._should_handle(path):
+                        return self.application(environ, start_response)
+                    return super().__call__(environ, start_response)
             return StaticFilesHandler(app)
     except Exception:
         pass
@@ -284,7 +279,6 @@ def run_wsgi(request, console):
     stdout = BytesIO()
     stderr = ErrorStream(console)
     environ = build_environ(request, stderr)
-    print(environ)
 
     options = {
         'status': 0,
@@ -296,7 +290,7 @@ def run_wsgi(request, console):
     def start_response(status, headers, exc_info=None):
         if options['status'] != 0 and not exc_info:
             raise AssertionError("Headers already set")
-        code, msg = status.split(None, 1)
+        code, _msg = status.split(None, 1)
         options['status'] = int(code)
         oheaders = options['headers']
         for k, v in headers:
