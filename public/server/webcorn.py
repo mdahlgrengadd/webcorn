@@ -8,7 +8,7 @@ import asyncio
 import inspect
 import sys
 import os
-from io import BytesIO, StringIO
+from io import BytesIO
 from pyodide.ffi import to_js
 from pyodide.http import pyfetch
 from js import Object
@@ -139,9 +139,9 @@ async def setup(project_root, app_spec, app_url):
     return syspaths
 
 
-def check_django(app):
+def check_django():
     """django开发态的静态文件处理比较特殊，需要在这里单独配置"""
-    global is_django
+    global is_django, application
     try:
         from django.conf import settings
         installed_apps = settings.INSTALLED_APPS
@@ -163,10 +163,9 @@ def check_django(app):
                     if not self._should_handle(path):
                         return self.application(environ, start_response)
                     return super().__call__(environ, start_response)
-            return StaticFilesHandler(app)
+            application = StaticFilesHandler(application)
     except Exception:
         pass
-    return app
 
 
 async def handle_lifespan():
@@ -186,23 +185,107 @@ async def handle_lifespan():
         elif msg_type == 'lifespan.startup.failed'
         
 
-async def start_asgi(app):
+async def start_asgi():
+    global asgi_server
     from asgiref.server import StatelessServer
+    STATE_TRANSITION_ERROR = "Got invalid state transition on lifespan protocol."
     class AsgiServer(StatelessServer):
         def __init__(self):
-            super().__init__(app)
+            super().__init__(application)
             self.next_reqid = 1000
             self.state = {}
             self.stdout = None
+            self.logger = logging.getLogger('webcorn.error')
+            self.startup_event = asyncio.Event()
+            self.shutdown_event = asyncio.Event()
+            self.receive_queue = asyncio.Queue()
+            self.error_occured = False
+            self.startup_failed = False
+            self.shutdown_failed = False
+            self.should_exit = False
         def set_stdout(self, stdout):
-            self.stdout = None
-        async def handle(self):
-            pass
+            self.stdout = stdout
+        async def handle_request(self, request):
+            self.stdout = BytesIO()
+
         async def application_send(self, scope, message):
             pass
+        async def startup(self):
+            self.logger.info("Waiting for application startup.")
+            checker_task = asyncio.create_task(self.application_checker())
+            main_lifespan_task = asyncio.create_task(self.lifespan())  # noqa: F841
+            # Keep a hard reference to prevent garbage collection
+            # See https://github.com/encode/uvicorn/pull/972
+            await self.receive_queue.put({'type': 'lifespan.startup'})
+            await self.startup_event.wait()
+
+            if self.startup_failed or self.error_occured:
+                self.logger.error("Application startup failed. Exiting.")
+                self.should_exit = True
+            else:
+                self.logger.info("Application startup complete.")
+        async def shutdown(self) -> None:
+            if self.error_occured:
+                return
+            self.logger.info("Waiting for application shutdown.")
+            await self.receive_queue.put({'type': 'lifespan.shutdown'})
+            await self.shutdown_event.wait()
+
+            if self.shutdown_failed or self.error_occured:
+                self.logger.error("Application shutdown failed. Exiting.")
+                self.should_exit = True
+            else:
+                self.logger.info("Application shutdown complete.")
+
+        async def lifespan(self) -> None:
+            try:
+                scope = {
+                    "type": "lifespan",
+                    "asgi": {"version": '3.0', "spec_version": "2.0"},
+                    "state": self.state,
+                }
+                await application(scope, self.receive_queue.get, self.lifespan_send)
+            except BaseException as exc:
+                self.error_occured = True
+                if self.startup_failed or self.shutdown_failed:
+                    return
+                msg = "ASGI 'lifespan' protocol appears unsupported."
+                self.logger.info(msg)
+            finally:
+                self.startup_event.set()
+                self.shutdown_event.set()
+        async def lifespan_send(self, message):
+            assert message["type"] in (
+                "lifespan.startup.complete",
+                "lifespan.startup.failed",
+                "lifespan.shutdown.complete",
+                "lifespan.shutdown.failed",
+            )
+            if message["type"] == "lifespan.startup.complete":
+                assert not self.startup_event.is_set(), STATE_TRANSITION_ERROR
+                assert not self.shutdown_event.is_set(), STATE_TRANSITION_ERROR
+                self.startup_event.set()
+            elif message["type"] == "lifespan.startup.failed":
+                assert not self.startup_event.is_set(), STATE_TRANSITION_ERROR
+                assert not self.shutdown_event.is_set(), STATE_TRANSITION_ERROR
+                self.startup_event.set()
+                self.startup_failed = True
+                if message.get("message"):
+                    self.logger.error(message["message"])
+            elif message["type"] == "lifespan.shutdown.complete":
+                assert self.startup_event.is_set(), STATE_TRANSITION_ERROR
+                assert not self.shutdown_event.is_set(), STATE_TRANSITION_ERROR
+                self.shutdown_event.set()
+            elif message["type"] == "lifespan.shutdown.failed":
+                assert self.startup_event.is_set(), STATE_TRANSITION_ERROR
+                assert not self.shutdown_event.is_set(), STATE_TRANSITION_ERROR
+                self.shutdown_event.set()
+                self.shutdown_failed = True
+                if message.get("message"):
+                    self.logger.error(message["message"])
     asgi_server = AsgiServer()
-    asyncio.ensure_future(asgi_server.application_checker())
-    await handle_lifespan()
+    await asgi_server.startup()
+    return not self.startup_failed
 
 async def load_app(project_root, app_spec, app_url):
     global application, is_wsgi, is_asgi
@@ -249,9 +332,9 @@ async def load_app(project_root, app_spec, app_url):
         raise RuntimeError(f"app object should be wsgi app or asgi app")
     application = instance
     if is_wsgi:
-        application = check_django(application)
+        application = check_django()
     if is_asgi:
-        await start_asgi(application)
+        await start_asgi()
 
 
 def build_environ(request, stderr):
@@ -363,4 +446,4 @@ async def run_asgi(request):
     request = request.to_py()
     stdout = BytesIO()
     asgi_server.set_stdout(stdout)
-    scope = build_scope(request, asgi_server.state)
+    return await asgi_server.handle_request(request)
