@@ -2,8 +2,6 @@
 import * as Comlink from "comlink";
 
 import { loadPyodide } from "https://cdn.jsdelivr.net/pyodide/v0.27.0/full/pyodide.mjs";
-// 静态加载pyodide.asm.js，否则在loadPyodide时将会动态加载，在module类型service worker中不支持动态加载
-//import "./pyodide.asm.js";
 
 let started = false;
 let isWsgi = true;

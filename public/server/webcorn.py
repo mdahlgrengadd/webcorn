@@ -4,6 +4,7 @@ from importlib import import_module
 from pathlib import Path
 from urllib.parse import urlparse, urljoin
 from collections.abc import Iterable
+import asyncio
 import inspect
 import sys
 import os
@@ -21,6 +22,7 @@ is_asgi = False
 app_root = ''
 server_version = f'Webcorn/{version} {python_implementation()}/{sys.version.split()[0]}'
 is_django = False
+asgi_server = None
 
 def is_wsgi_app(app):
     # 检查对象是否可调用
@@ -120,7 +122,7 @@ async def setup(project_root, app_spec, app_url):
 
     try:
         from django.urls import set_script_prefix
-        # 将app_root设置到thread local的_prefixes中
+        # 将app_root设置到django.urls thread local的_prefixes中
         set_script_prefix(app_root)
     except:
         pass
@@ -167,6 +169,40 @@ def check_django(app):
     return app
 
 
+async def handle_lifespan():
+    scope = {
+        'type': 'lifespan',
+        'asgi': {
+            'version': '3.0',
+            'spec_version': '2.0',
+        },
+        'state': {},
+    }
+    queue = asyncio.Queue()
+    async def send(message):
+        msg_type = message['type']
+        if msg_type == 'lifespan.startup.complete':
+            asgi_server.state = scope['state']
+        elif msg_type == 'lifespan.startup.failed'
+        
+
+async def start_asgi(app):
+    from asgiref.server import StatelessServer
+    class AsgiServer(StatelessServer):
+        def __init__(self):
+            super().__init__(app)
+            self.next_reqid = 1000
+            self.state = {}
+            self.stdout = None
+        def set_stdout(self, stdout):
+            self.stdout = None
+        async def handle(self):
+            pass
+        async def application_send(self, scope, message):
+            pass
+    asgi_server = AsgiServer()
+    asyncio.ensure_future(asgi_server.application_checker())
+    await handle_lifespan()
 
 async def load_app(project_root, app_spec, app_url):
     global application, is_wsgi, is_asgi
@@ -212,7 +248,10 @@ async def load_app(project_root, app_spec, app_url):
     if not is_wsgi and not is_asgi:
         raise RuntimeError(f"app object should be wsgi app or asgi app")
     application = instance
-    application = check_django(application)
+    if is_wsgi:
+        application = check_django(application)
+    if is_asgi:
+        await start_asgi(application)
 
 
 def build_environ(request, stderr):
@@ -322,4 +361,6 @@ def run_wsgi(request, console):
 
 async def run_asgi(request):
     request = request.to_py()
-    pass
+    stdout = BytesIO()
+    asgi_server.set_stdout(stdout)
+    scope = build_scope(request, asgi_server.state)
