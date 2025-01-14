@@ -1,11 +1,15 @@
+# some of the code from uvicorn
+
 from functools import partial
 from asyncio import iscoroutinefunction
 from importlib import import_module
 from pathlib import Path
 from urllib.parse import urlparse, urljoin
 from collections.abc import Iterable
+import traceback
 import asyncio
 import inspect
+import time
 import sys
 import os
 from io import BytesIO
@@ -180,199 +184,284 @@ def check_django():
         pass
 
 
+class AsgiServer:
+    STATE_TRANSITION_ERROR = "Got invalid state transition on lifespan protocol."
+    APPLICATION_CHECKER_INTERVAL = 0.1
+    def __init__(self, max_app_count=1000):
+        self.max_app_count = max_app_count
+        self.instances = {}
+        self.next_instance_id = 1000
+        self.state = {}
+        self.logger = Logger('webcorn.error')
+        self.startup_event = asyncio.Event()
+        self.shutdown_event = asyncio.Event()
+        self.receive_queue = asyncio.Queue()
+        self.error_occured = False
+        self.startup_failed = False
+        self.shutdown_failed = False
+        self.should_exit = False
+        self.access_logger = Logger('webcorn.access')
+
+    async def startup(self):
+        self.logger.info("Waiting for application startup.")
+        checker_task = asyncio.create_task(self.application_checker())
+        main_lifespan_task = asyncio.create_task(self.lifespan())  # noqa: F841
+        # Keep a hard reference to prevent garbage collection
+        # See https://github.com/encode/uvicorn/pull/972
+        await self.receive_queue.put({'type': 'lifespan.startup'})
+        await self.startup_event.wait()
+        if self.startup_failed or self.error_occured:
+            self.logger.error("Application startup failed. Exiting.")
+            self.should_exit = True
+        else:
+            self.logger.info("Application startup complete.")
+
+    async def shutdown(self) -> None:
+        if self.error_occured:
+            return
+        self.logger.info("Waiting for application shutdown.")
+        await self.receive_queue.put({'type': 'lifespan.shutdown'})
+        await self.shutdown_event.wait()
+
+        if self.shutdown_failed or self.error_occured:
+            self.logger.error("Application shutdown failed. Exiting.")
+            self.should_exit = True
+        else:
+            self.logger.info("Application shutdown complete.")
+
+    async def lifespan(self) -> None:
+        try:
+            scope = {
+                "type": "lifespan",
+                "asgi": {"version": '3.0', "spec_version": "2.0"},
+                "state": self.state,
+            }
+            await application(scope, self.receive_queue.get, self.lifespan_send)
+        except BaseException as exc:
+            self.error_occured = True
+            if self.startup_failed or self.shutdown_failed:
+                return
+            msg = "ASGI 'lifespan' protocol appears unsupported."
+            self.logger.info(msg)
+        finally:
+            self.startup_event.set()
+            self.shutdown_event.set()
+
+    async def lifespan_send(self, message):
+        assert message["type"] in (
+            "lifespan.startup.complete",
+            "lifespan.startup.failed",
+            "lifespan.shutdown.complete",
+            "lifespan.shutdown.failed",
+        )
+        if message["type"] == "lifespan.startup.complete":
+            assert not self.startup_event.is_set(), self.STATE_TRANSITION_ERROR
+            assert not self.shutdown_event.is_set(), self.STATE_TRANSITION_ERROR
+            self.startup_event.set()
+        elif message["type"] == "lifespan.startup.failed":
+            assert not self.startup_event.is_set(), self.STATE_TRANSITION_ERROR
+            assert not self.shutdown_event.is_set(), self.STATE_TRANSITION_ERROR
+            self.startup_event.set()
+            self.startup_failed = True
+            if message.get("message"):
+                self.logger.error(message["message"])
+        elif message["type"] == "lifespan.shutdown.complete":
+            assert self.startup_event.is_set(), self.STATE_TRANSITION_ERROR
+            assert not self.shutdown_event.is_set(), self.STATE_TRANSITION_ERROR
+            self.shutdown_event.set()
+        elif message["type"] == "lifespan.shutdown.failed":
+            assert self.startup_event.is_set(), self.STATE_TRANSITION_ERROR
+            assert not self.shutdown_event.is_set(), self.STATE_TRANSITION_ERROR
+            self.shutdown_event.set()
+            self.shutdown_failed = True
+            if message.get("message"):
+                self.logger.error(message["message"])
+
+    def build_scope(self, request):
+        path = request['path']
+        headers = [[k.encode(), v.encode()] for k, v in request['headers'].items()]
+        scope = {
+            'type': 'http',
+            'asgi': {
+                'version': '3.0',
+                'spec_version': '2.0',
+            },
+            'http_version': '1.1',
+            'method': request['method'],
+            'scheme': request['scheme'],
+            'path': path,
+            'raw_path': path.encode(),
+            'query_string': request['query'].encode(),
+            'root_path': app_root,
+            'headers': headers,
+            'client': None,
+            'server': [request['server'], request['port']],
+            'state': self.state.copy(),
+        }
+        return scope
+
+    async def handle_request(self, request):
+        scope = self.build_scope(request)
+        instance_id = f'inst-{self.next_instance_id}'
+        self.next_instance_id += 1
+        instance = self.get_or_create_application_instance(instance_id, scope)
+        instance['input_queue'].put_nowait({'type': 'http.request', 'body': request['body']})
+        webcorn = instance['webcorn']
+        await webcorn['message_event'].wait()
+        webcorn['message_event'].clear()
+        result = to_js({
+            'status': webcorn['status'],
+            'headers': webcorn['headers'],
+            'body': webcorn['output'].getbuffer(),
+        }, dict_converter=Object.fromEntries)
+        self.delete_application_instance(instance_id)
+        return result
+
+    async def application_send(self, instance_id, message):
+        instance = self.instances[instance_id]
+        webcorn = instance['webcorn']
+        scope = instance['scope']
+        message_type = message["type"]
+        if not webcorn.get('response_started'):
+            if message_type != 'http.response.start':
+                msg = 'Expected ASGI message "http.response.start", but got "%s".'
+                raise RuntimeError(msg % message_type)
+            webcorn['response_started'] = True
+            webcorn['status'] = message['status']
+            oheaders = webcorn['headers']
+            for k, v in message.get('headers', []):
+                k = k.decode().lower()
+                v = v.decode().strip()
+                if k in oheaders:
+                    oheaders[k] += ',' + v
+                else:
+                    oheaders[k] = v
+            path_with_query_string = scope.get('path')
+            if scope.get('query_string'):
+                path_with_query_string += '?' + scope.get('query_string').decode()
+            self.access_logger.info(
+                '%s - "%s %s HTTP/%s" %d',
+                scope.get('client'),
+                scope["method"],
+                path_with_query_string,
+                scope["http_version"],
+                message['status'],
+            )
+        elif not webcorn.get('response_complete'):
+            # Sending response body
+            if message_type != "http.response.body":
+                msg = "Expected ASGI message 'http.response.body', but got '%s'."
+                raise RuntimeError(msg % message_type)
+            body = message.get("body", b"")
+            more_body = message.get("more_body", False)
+            # Write response body
+            data = b"" if scope["method"] == "HEAD" else body
+            output = webcorn['output']
+            output.write(data)
+            # Handle response completion
+            if not more_body:
+                webcorn['response_complete'] = True
+                webcorn['message_event'].set()
+        else:
+            # Response already sent
+            msg = "Unexpected ASGI message '%s' sent, after response already completed."
+            raise RuntimeError(msg % message_type)
+
+    async def application_checker(self):
+        """
+        Goes through the set of current application instance Futures and cleans up
+        any that are done/prints exceptions for any that errored.
+        """
+        while True:
+            await asyncio.sleep(self.APPLICATION_CHECKER_INTERVAL)
+            for instance_id, instance in list(self.instances.items()):
+                if instance["future"].done():
+                    exception = instance["future"].exception()
+                    if exception:
+                        await self.application_exception(exception, instance)
+                    try:
+                        del self.instances[instance_id]
+                    except KeyError:
+                        # Exception handling might have already got here before us. That's fine.
+                        pass
+
+    async def application_exception(self, exception, application_details):
+        """
+        Called whenever an application coroutine has an exception.
+        """
+        logging.error(
+            "Exception inside application: %s\n%s%s",
+            exception,
+            "".join(traceback.format_tb(exception.__traceback__)),
+            f"  {exception}",
+        ) 
+
+    def get_or_create_application_instance(self, instance_id, scope):
+        """
+        Creates an application instance and returns its queue.
+        """
+        if instance_id in self.instances:
+            self.instances[instance_id]["last_used"] = time.time()
+            return self.instances[instance_id]
+        # See if we need to delete an old one
+        while len(self.instances) > self.max_app_count:
+            self.delete_oldest_application_instance()
+        # Make an instance of the application
+        input_queue = asyncio.Queue()
+        # Run it, and stash the future for later checking
+        future = asyncio.ensure_future(
+            application(
+                scope=scope,
+                receive=input_queue.get,
+                send=lambda message: self.application_send(instance_id, message),
+            ),
+        )
+        self.instances[instance_id] = {
+            "id": instance_id,
+            "input_queue": input_queue,
+            "future": future,
+            "scope": scope,
+            "last_used": time.time(),
+            'webcorn': {
+                'output': BytesIO(),
+                'response_started': False,
+                'response_complete': False,
+                'message_event': asyncio.Event(),
+                'status': 500,
+                'headers': {
+                    'server': server_version,
+                },
+            },
+        }
+        return self.instances[instance_id]
+
+    def delete_oldest_application_instance(self):
+        """
+        Finds and deletes the oldest application instance
+        """
+        oldest_time = min(
+            instance["last_used"] for instance in self.instances.values()
+        )
+        for instance_id, instance in self.instances.items():
+            if instance["last_used"] == oldest_time:
+                self.delete_application_instance(instance_id)
+                # Return to make sure we only delete one in case two have
+                # the same oldest time
+                return
+
+    def delete_application_instance(self, instance_id):
+        """
+        Removes an application instance (makes sure its task is stopped,
+        then removes it from the current set)
+        """
+        instance = self.instances[instance_id]
+        del self.instances[instance_id]
+        if not instance["future"].done():
+            instance["future"].cancel()
+
+
 async def start_asgi():
     global asgi_server
-    from asgiref.server import StatelessServer
-    STATE_TRANSITION_ERROR = "Got invalid state transition on lifespan protocol."
-
-    class AsgiServer(StatelessServer):
-        def __init__(self):
-            super().__init__(application)
-            self.next_scopeid = 1000
-            self.state = {}
-            self.logger = Logger('webcorn.error')
-            self.startup_event = asyncio.Event()
-            self.shutdown_event = asyncio.Event()
-            self.receive_queue = asyncio.Queue()
-            self.error_occured = False
-            self.startup_failed = False
-            self.shutdown_failed = False
-            self.should_exit = False
-            self.access_logger = Logger('webcorn.access')
-
-        async def startup(self):
-            self.logger.info("Waiting for application startup.")
-            checker_task = asyncio.create_task(self.application_checker())
-            main_lifespan_task = asyncio.create_task(self.lifespan())  # noqa: F841
-            # Keep a hard reference to prevent garbage collection
-            # See https://github.com/encode/uvicorn/pull/972
-            await self.receive_queue.put({'type': 'lifespan.startup'})
-            await self.startup_event.wait()
-
-            if self.startup_failed or self.error_occured:
-                self.logger.error("Application startup failed. Exiting.")
-                self.should_exit = True
-            else:
-                self.logger.info("Application startup complete.")
-
-        async def shutdown(self) -> None:
-            if self.error_occured:
-                return
-            self.logger.info("Waiting for application shutdown.")
-            await self.receive_queue.put({'type': 'lifespan.shutdown'})
-            await self.shutdown_event.wait()
-
-            if self.shutdown_failed or self.error_occured:
-                self.logger.error("Application shutdown failed. Exiting.")
-                self.should_exit = True
-            else:
-                self.logger.info("Application shutdown complete.")
-
-        async def lifespan(self) -> None:
-            try:
-                scope = {
-                    "type": "lifespan",
-                    "asgi": {"version": '3.0', "spec_version": "2.0"},
-                    "state": self.state,
-                }
-                await application(scope, self.receive_queue.get, self.lifespan_send)
-            except BaseException as exc:
-                self.error_occured = True
-                if self.startup_failed or self.shutdown_failed:
-                    return
-                msg = "ASGI 'lifespan' protocol appears unsupported."
-                self.logger.info(msg)
-            finally:
-                self.startup_event.set()
-                self.shutdown_event.set()
-
-        async def lifespan_send(self, message):
-            assert message["type"] in (
-                "lifespan.startup.complete",
-                "lifespan.startup.failed",
-                "lifespan.shutdown.complete",
-                "lifespan.shutdown.failed",
-            )
-            if message["type"] == "lifespan.startup.complete":
-                assert not self.startup_event.is_set(), STATE_TRANSITION_ERROR
-                assert not self.shutdown_event.is_set(), STATE_TRANSITION_ERROR
-                self.startup_event.set()
-            elif message["type"] == "lifespan.startup.failed":
-                assert not self.startup_event.is_set(), STATE_TRANSITION_ERROR
-                assert not self.shutdown_event.is_set(), STATE_TRANSITION_ERROR
-                self.startup_event.set()
-                self.startup_failed = True
-                if message.get("message"):
-                    self.logger.error(message["message"])
-            elif message["type"] == "lifespan.shutdown.complete":
-                assert self.startup_event.is_set(), STATE_TRANSITION_ERROR
-                assert not self.shutdown_event.is_set(), STATE_TRANSITION_ERROR
-                self.shutdown_event.set()
-            elif message["type"] == "lifespan.shutdown.failed":
-                assert self.startup_event.is_set(), STATE_TRANSITION_ERROR
-                assert not self.shutdown_event.is_set(), STATE_TRANSITION_ERROR
-                self.shutdown_event.set()
-                self.shutdown_failed = True
-                if message.get("message"):
-                    self.logger.error(message["message"])
-
-        def build_scope(self, request):
-            path = request['path']
-            headers = [[k.encode(), v.encode()] for k, v in request['headers'].items()]
-            scope = {
-                'type': 'http',
-                'asgi': {
-                    'version': '3.0',
-                    'spec_version': '2.0',
-                },
-                'http_version': '1.1',
-                'method': request['method'],
-                'scheme': request['scheme'],
-                'path': path,
-                'raw_path': path.encode(),
-                'query_string': request['query'].encode(),
-                'root_path': app_root,
-                'headers': headers,
-                'client': None,
-                'server': [request['server'], request['port']],
-                'state': self.state.copy(),
-                'webcorn': {
-                    'output': BytesIO(),
-                    'response_started': False,
-                    'response_complete': False,
-                    'message_event': asyncio.Event(),
-                    'status': 500,
-                    'headers': {
-                        'server': server_version,
-                    },
-                },
-            }
-            return scope
-
-        async def handle_request(self, request):
-            scope = self.build_scope(request)
-            scope_id = f'scope-{self.next_scopeid}'
-            self.next_scopeid += 1
-            input_queue = self.get_or_create_application_instance(scope_id, scope)
-            input_queue.put_nowait({'type': 'http.request', 'body': request['body']})
-            webcorn = scope['webcorn']
-            await webcorn['message_event'].wait()
-            webcorn['message_event'].clear()
-            result = to_js({
-                'status': webcorn['status'],
-                'headers': webcorn['headers'],
-                'body': webcorn['output'].getbuffer(),
-            }, dict_converter=Object.fromEntries)
-            self.delete_application_instance(scope_id)
-            return result
-
-        async def application_send(self, scope, message):
-            webcorn = scope['webcorn']
-            message_type = message["type"]
-            if not webcorn.get('response_started'):
-                if message_type != 'http.response.start':
-                    msg = 'Expected ASGI message "http.response.start", but got "%s".'
-                    raise RuntimeError(msg % message_type)
-                webcorn['response_started'] = True
-                webcorn['status'] = message['status']
-                oheaders = webcorn['headers']
-                for k, v in message.get('headers', []):
-                    k = k.decode().lower()
-                    v = v.decode().strip()
-                    if k in oheaders:
-                        oheaders[k] += ',' + v
-                    else:
-                        oheaders[k] = v
-                path_with_query_string = scope.get('path')
-                if scope.get('query_string'):
-                    path_with_query_string += '?' + scope.get('query_string').decode()
-                self.access_logger.info(
-                    '%s - "%s %s HTTP/%s" %d',
-                    scope.get('client'),
-                    scope["method"],
-                    path_with_query_string,
-                    scope["http_version"],
-                    message['status'],
-                )
-            elif not webcorn.get('response_complete'):
-                # Sending response body
-                if message_type != "http.response.body":
-                    msg = "Expected ASGI message 'http.response.body', but got '%s'."
-                    raise RuntimeError(msg % message_type)
-                body = message.get("body", b"")
-                more_body = message.get("more_body", False)
-                # Write response body
-                data = b"" if scope["method"] == "HEAD" else body
-                output = webcorn['output']
-                output.write(data)
-                # Handle response completion
-                if not more_body:
-                    webcorn['response_complete'] = True
-                    webcorn['message_event'].set()
-            else:
-                # Response already sent
-                msg = "Unexpected ASGI message '%s' sent, after response already completed."
-                raise RuntimeError(msg % message_type)
     asgi_server = AsgiServer()
     await asgi_server.startup()
     return not asgi_server.startup_failed

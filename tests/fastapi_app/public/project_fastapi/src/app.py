@@ -1,42 +1,25 @@
-async def app(scope, receive, send):
-    print('asgi app running')
-    if scope['type'] == 'lifespan':
-        message = await receive()
-        assert message['type'] == 'lifespan.startup'
-        await send({'type': 'lifespan.startup.complete'})
-        message = await receive()
-        assert message['type'] == 'lifespan.shutdown'
-        await send({'type': 'lifespan.shutdown.complete'})
-        return
-    
-    if scope['type'] == 'websocket':
-        await send({'type': 'websocket.close', 'code':1000})
-        return
-    
-    if scope['type'] == 'http':
-        headers = [
-            (b'Content-Type', b'text/plain'),
-            #('Content-Length', '14'),
-        ]
-        await send({
-            'type': 'http.response.start',
-            'status': 200,
-            'headers': headers,
-            })
-        await send({
-            'type': 'http.response.body',
-            'body': b'Hello ',
-            'more_body': True,
-        })
-        await send({
-            'type': 'http.response.body',
-            'body': b'Webcorn from fastapi!',
-            'more_body': True,
-        })
-        await send({
-            'type': 'http.response.body',
-            'body': b'',
-        })
-        return
+from fastapi import FastAPI
+from pydantic import BaseModel
 
-is_wsgi = False
+app = FastAPI()
+
+
+class Item(BaseModel):
+    name: str
+    price: float
+    is_offer: bool | None = None
+
+
+@app.get("/")
+async def read_root():
+    return {"Hello": "World"}
+
+
+@app.get("/items/{item_id}")
+async def read_item(item_id: int, q: str | None = None):
+    return {"item_id": item_id, "q": q}
+
+
+@app.put("/items/{item_id}")
+async def update_item(item_id: int, item: Item):
+    return {"item_name": item.name, "item_id": item_id}
