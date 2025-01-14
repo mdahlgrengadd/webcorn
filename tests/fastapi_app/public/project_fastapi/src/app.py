@@ -13,9 +13,9 @@ async def app(scope, receive, send):
         await send({'type': 'websocket.close', 'code':1000})
         return
     
-    if scope['type' == 'http']:
+    if scope['type'] == 'http':
         headers = [
-            ('Content-Type', 'text/plain'),
+            (b'Content-Type', b'text/plain'),
             #('Content-Length', '14'),
         ]
         await send({
@@ -30,7 +30,7 @@ async def app(scope, receive, send):
         })
         await send({
             'type': 'http.response.body',
-            'body': b'Webcorn!',
+            'body': b'Webcorn from fastapi!',
             'more_body': True,
         })
         await send({

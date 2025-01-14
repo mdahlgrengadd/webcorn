@@ -212,14 +212,15 @@ const handleFetch = async event => {
     } else if (url.href.startsWith(appUrl)) {
         console.log('service worker: app request');
         const now = Date.now();
-        if (!webcornServer || now > webcornServer.lastUpdateTime + 10*1000) {
-            console.log(`server not started: ${webcornServer}`)
+        if (!webcornServer || now > webcornServer.lastUpdateTime + 1000) {
+            webcornServer = null;
+            console.log(`server not started`);
             return new Response("Server not Started", {
                 status: 500,
                 headers: {
                     'Content-Type': 'text/plain; charset=utf-8',
                 },
-            })
+            });
         }
         const req = await getRequest(event);
         const res = await webcornServer.endpoint.handleRequest(req);

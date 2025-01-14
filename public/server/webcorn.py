@@ -16,6 +16,7 @@ from platform import python_implementation
 import micropip
 
 version = '0.1.0'
+js_console = None
 application = None
 is_wsgi = True
 is_asgi = False
@@ -23,6 +24,17 @@ app_root = ''
 server_version = f'Webcorn/{version} {python_implementation()}/{sys.version.split()[0]}'
 is_django = False
 asgi_server = None
+
+class Logger:
+    def __init__(self, name):
+        self.name = name
+    def info(self, msg, *args):
+        if js_console:
+            js_console.log(msg % args)
+    def error(self, msg, *args):
+        if js_console:
+            js_console.log(msg % args)
+
 
 def is_wsgi_app(app):
     # 检查对象是否可调用
@@ -168,34 +180,17 @@ def check_django():
         pass
 
 
-async def handle_lifespan():
-    scope = {
-        'type': 'lifespan',
-        'asgi': {
-            'version': '3.0',
-            'spec_version': '2.0',
-        },
-        'state': {},
-    }
-    queue = asyncio.Queue()
-    async def send(message):
-        msg_type = message['type']
-        if msg_type == 'lifespan.startup.complete':
-            asgi_server.state = scope['state']
-        elif msg_type == 'lifespan.startup.failed'
-        
-
 async def start_asgi():
     global asgi_server
     from asgiref.server import StatelessServer
     STATE_TRANSITION_ERROR = "Got invalid state transition on lifespan protocol."
+
     class AsgiServer(StatelessServer):
         def __init__(self):
             super().__init__(application)
-            self.next_reqid = 1000
+            self.next_scopeid = 1000
             self.state = {}
-            self.stdout = None
-            self.logger = logging.getLogger('webcorn.error')
+            self.logger = Logger('webcorn.error')
             self.startup_event = asyncio.Event()
             self.shutdown_event = asyncio.Event()
             self.receive_queue = asyncio.Queue()
@@ -203,13 +198,8 @@ async def start_asgi():
             self.startup_failed = False
             self.shutdown_failed = False
             self.should_exit = False
-        def set_stdout(self, stdout):
-            self.stdout = stdout
-        async def handle_request(self, request):
-            self.stdout = BytesIO()
+            self.access_logger = Logger('webcorn.access')
 
-        async def application_send(self, scope, message):
-            pass
         async def startup(self):
             self.logger.info("Waiting for application startup.")
             checker_task = asyncio.create_task(self.application_checker())
@@ -224,6 +214,7 @@ async def start_asgi():
                 self.should_exit = True
             else:
                 self.logger.info("Application startup complete.")
+
         async def shutdown(self) -> None:
             if self.error_occured:
                 return
@@ -254,6 +245,7 @@ async def start_asgi():
             finally:
                 self.startup_event.set()
                 self.shutdown_event.set()
+
         async def lifespan_send(self, message):
             assert message["type"] in (
                 "lifespan.startup.complete",
@@ -283,12 +275,111 @@ async def start_asgi():
                 self.shutdown_failed = True
                 if message.get("message"):
                     self.logger.error(message["message"])
+
+        def build_scope(self, request):
+            path = request['path']
+            headers = [[k.encode(), v.encode()] for k, v in request['headers'].items()]
+            scope = {
+                'type': 'http',
+                'asgi': {
+                    'version': '3.0',
+                    'spec_version': '2.0',
+                },
+                'http_version': '1.1',
+                'method': request['method'],
+                'scheme': request['scheme'],
+                'path': path,
+                'raw_path': path.encode(),
+                'query_string': request['query'].encode(),
+                'root_path': app_root,
+                'headers': headers,
+                'client': None,
+                'server': [request['server'], request['port']],
+                'state': self.state.copy(),
+                'webcorn': {
+                    'output': BytesIO(),
+                    'response_started': False,
+                    'response_complete': False,
+                    'message_event': asyncio.Event(),
+                    'status': 500,
+                    'headers': {
+                        'server': server_version,
+                    },
+                },
+            }
+            return scope
+
+        async def handle_request(self, request):
+            scope = self.build_scope(request)
+            scope_id = f'scope-{self.next_scopeid}'
+            self.next_scopeid += 1
+            input_queue = self.get_or_create_application_instance(scope_id, scope)
+            input_queue.put_nowait({'type': 'http.request', 'body': request['body']})
+            webcorn = scope['webcorn']
+            await webcorn['message_event'].wait()
+            webcorn['message_event'].clear()
+            result = to_js({
+                'status': webcorn['status'],
+                'headers': webcorn['headers'],
+                'body': webcorn['output'].getbuffer(),
+            }, dict_converter=Object.fromEntries)
+            self.delete_application_instance(scope_id)
+            return result
+
+        async def application_send(self, scope, message):
+            webcorn = scope['webcorn']
+            message_type = message["type"]
+            if not webcorn.get('response_started'):
+                if message_type != 'http.response.start':
+                    msg = 'Expected ASGI message "http.response.start", but got "%s".'
+                    raise RuntimeError(msg % message_type)
+                webcorn['response_started'] = True
+                webcorn['status'] = message['status']
+                oheaders = webcorn['headers']
+                for k, v in message.get('headers', []):
+                    k = k.decode().lower()
+                    v = v.decode().strip()
+                    if k in oheaders:
+                        oheaders[k] += ',' + v
+                    else:
+                        oheaders[k] = v
+                path_with_query_string = scope.get('path')
+                if scope.get('query_string'):
+                    path_with_query_string += '?' + scope.get('query_string').decode()
+                self.access_logger.info(
+                    '%s - "%s %s HTTP/%s" %d',
+                    scope.get('client'),
+                    scope["method"],
+                    path_with_query_string,
+                    scope["http_version"],
+                    message['status'],
+                )
+            elif not webcorn.get('response_complete'):
+                # Sending response body
+                if message_type != "http.response.body":
+                    msg = "Expected ASGI message 'http.response.body', but got '%s'."
+                    raise RuntimeError(msg % message_type)
+                body = message.get("body", b"")
+                more_body = message.get("more_body", False)
+                # Write response body
+                data = b"" if scope["method"] == "HEAD" else body
+                output = webcorn['output']
+                output.write(data)
+                # Handle response completion
+                if not more_body:
+                    webcorn['response_complete'] = True
+                    webcorn['message_event'].set()
+            else:
+                # Response already sent
+                msg = "Unexpected ASGI message '%s' sent, after response already completed."
+                raise RuntimeError(msg % message_type)
     asgi_server = AsgiServer()
     await asgi_server.startup()
-    return not self.startup_failed
+    return not asgi_server.startup_failed
 
-async def load_app(project_root, app_spec, app_url):
-    global application, is_wsgi, is_asgi
+async def load_app(project_root, app_spec, app_url, console):
+    global application, is_wsgi, is_asgi, js_console
+    js_console = console
     await setup(project_root, app_spec, app_url)
     _, _, apppath = app_spec.rpartition('/')
     pypath, _, appname = apppath.partition(':')
@@ -332,7 +423,7 @@ async def load_app(project_root, app_spec, app_url):
         raise RuntimeError(f"app object should be wsgi app or asgi app")
     application = instance
     if is_wsgi:
-        application = check_django()
+        check_django()
     if is_asgi:
         await start_asgi()
 
@@ -396,10 +487,10 @@ class ErrorStream:
             self.console.log(msg)
 
 
-def run_wsgi(request, console):
+def run_wsgi(request):
     request = request.to_py()
     stdout = BytesIO()
-    stderr = ErrorStream(console)
+    stderr = ErrorStream(js_console)
     environ = build_environ(request, stderr)
 
     options = {
@@ -441,9 +532,5 @@ def run_wsgi(request, console):
     }, dict_converter=Object.fromEntries)
     return result
 
-
 async def run_asgi(request):
-    request = request.to_py()
-    stdout = BytesIO()
-    asgi_server.set_stdout(stdout)
-    return await asgi_server.handle_request(request)
+    return await asgi_server.handle_request(request.to_py())

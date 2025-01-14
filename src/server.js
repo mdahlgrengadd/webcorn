@@ -33,7 +33,7 @@ class WebcornWorker {
         this.worker = new Worker(serverUrl('worker.mjs'), {type: 'module', name: this.name});
         this.wrapper = Comlink.wrap(this.worker);
         this.isWsgi = await this.wrapper.start(this.projectRoot, this.appSpec, this.appUrl, this.getLogger());
-        this.maxCount = this.isWsgi ? 1 : 100;
+        this.maxCount = this.isWsgi ? 1 : 1000;
         this.activeCount = 0;
     }
 
@@ -112,7 +112,7 @@ if (navigator.serviceWorker.controller) {
     const pingTarget = Comlink.wrap(pingPort1);
     const ping = async () => {
         await pingTarget.ping();
-        setTimeout(ping, 1000);
+        setTimeout(ping, 300);
     }
     ping();
     Comlink.expose({ handleRequest }, requestPort1);

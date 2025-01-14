@@ -1,13 +1,13 @@
 [project]
-name = "project_django"
+name = "project_fastapi"
 version = "0.1.0"
 keywords = [
-    "project_django",
+    "project_fastapi",
     "webcorn",
-    "wsgi",
+    "asgi",
 ]
 authors = [{name="Zenk Ju", email="juzejian@gmail.com"},]
-description = "A django sample project that will run in a browser"
+description = "A fastapi sample project that will run in a browser"
 license = "MIT"
 requires-python = ">=3.8"
 classifiers = [
@@ -16,18 +16,14 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 dependencies = [
-    "django",
-    "sqlite3",
-    "tzdata",
+    "fastapi",
+    "asgiref",
 ]
 
 [project.urls]
-Homepage = "https://github.com/frybox/fryweb"
-"Bug Tracker" = "https://github.com/frybox/fryweb/issues"
-Source = "https://github.com/frybox/fryweb"
-
-[project.scripts]
-fry = "fryweb.cmdline:cli"
+Homepage = "https://github.com/frybox/webcorn"
+"Bug Tracker" = "https://github.com/frybox/webcorn/issues"
+Source = "https://github.com/frybox/webcorn"
 
 [build-system]
 requires = ["hatchling"]
