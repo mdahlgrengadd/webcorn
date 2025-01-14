@@ -1,2 +1,2 @@
 # webcorn
-ASGI/WSGI Dev Server running in a browser
+Run django/flask/fastapi application in the browser, providing a complete offline development experience.
