@@ -1,0 +1,14 @@
+<script src="https://cdn.jsdelivr.net/pyodide/v0.27.1/full/pyodide.js"></script>
+<script>
+    async function main() {
+        const pyodide = await loadPyodide();
+        await pyodide.loadPackage('micropip');
+        const micropip = pyodide.pyimport('micropip');
+        await micropip.install('pydantic')
+        pyodide.runPython(`
+        from pydantic.json_schema import GenerateJsonSchema
+        GenerateJsonSchema()
+        `);
+    }
+    main();
+</script>
