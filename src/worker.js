@@ -10,7 +10,7 @@ let pyodide;
 let console = self.console;
 
 const start = async (projectRoot, appSpec, appUrl, logger) => {
-    console = logger;
+    //console = logger;
     let begin = performance.now();
     console.log("loading pyodide");
     pyodide = await loadPyodide();

@@ -100,6 +100,9 @@ def is_asgi_app(app):
 
 
 async def install_dependencies(root):
+    # Django need sqlite3
+    await micropip.install('sqlite3')
+
     requirements = root / 'requirements.txt'
     if requirements.is_file():
         with requirements.open('r') as f:
@@ -155,13 +158,15 @@ async def setup(project_root, app_spec, app_url):
     return syspaths
 
 
-def check_django():
+async def check_django():
     """django开发态的静态文件处理比较特殊，需要在这里单独配置"""
     global is_django, application
     try:
         from django.conf import settings
         installed_apps = settings.INSTALLED_APPS
         is_django = True
+        # Django need tzdata
+        await micropip.install('tzdata')
         if 'django.contrib.staticfiles' in installed_apps:
             from django.contrib.staticfiles.handlers import StaticFilesHandlerMixin
             from django.core.handlers.wsgi import WSGIHandler, get_path_info, get_script_name
@@ -462,6 +467,8 @@ class AsgiServer:
 
 async def start_asgi():
     global asgi_server
+    # FastAPI need ssl
+    micropip.install('ssl')
     asgi_server = AsgiServer()
     await asgi_server.startup()
     return not asgi_server.startup_failed
@@ -512,7 +519,7 @@ async def load_app(project_root, app_spec, app_url, console):
         raise RuntimeError(f"app object should be wsgi app or asgi app")
     application = instance
     if is_wsgi:
-        check_django()
+        await check_django()
     if is_asgi:
         await start_asgi()
 

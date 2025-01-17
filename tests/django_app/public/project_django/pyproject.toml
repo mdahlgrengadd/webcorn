@@ -17,8 +17,6 @@ classifiers = [
 ]
 dependencies = [
     "django",
-    "sqlite3",
-    "tzdata",
 ]
 
 [project.urls]

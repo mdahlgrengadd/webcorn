@@ -17,7 +17,6 @@ classifiers = [
 ]
 dependencies = [
     "fastapi",
-    "ssl",
 ]
 
 [project.urls]
