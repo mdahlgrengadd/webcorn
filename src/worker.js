@@ -1,7 +1,7 @@
 // This is the web worker main js that run the webcorn server
 import * as Comlink from "comlink";
 
-import { loadPyodide } from "https://cdn.jsdelivr.net/pyodide/v0.27.0/full/pyodide.mjs";
+import { loadPyodide } from "https://cdn.jsdelivr.net/pyodide/v0.26.4/full/pyodide.mjs";
 
 let started = false;
 let isWsgi = true;
