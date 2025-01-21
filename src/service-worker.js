@@ -35,19 +35,8 @@ self.addEventListener('install', async e => {
             joinUrl(scope, 'server/index.mjs'),
             joinUrl(scope, 'server/worker.mjs'),
             joinUrl(scope, 'server/webcorn.py'),
-            /*
-            joinUrl(scope, 'server/pyodide-lock.json'),
-            joinUrl(scope, 'server/pyodide.asm.js'),
-            joinUrl(scope, 'server/pyodide.asm.wasm'),
-            joinUrl(scope, 'server/pyodide.d.ts'),
-            joinUrl(scope, 'server/pyodide.js'),
-            joinUrl(scope, 'server/pyodide.js.map'),
-            joinUrl(scope, 'server/pyodide.mjs'),
-            joinUrl(scope, 'server/pyodide.mjs.map'),
-            joinUrl(scope, 'server/python_stdlib.zip'),
-            */
         ])
-    )
+    );
     //await self.skipWaiting();
 });
 
@@ -75,7 +64,6 @@ self.addEventListener('message', async event => {
             const pingPort = event.ports[0];
             const requestPort = event.ports[1];
             const ping = () => {
-                //console.log('service worker message: ping from server');
                 webcornServer.lastUpdateTime = Date.now();
             }
             Comlink.expose({ping}, pingPort);
@@ -207,8 +195,6 @@ const handleFetch = async event => {
         })
     } else if (method === 'GET' && url.href.startsWith(serverUrl)) {
         return await caches.match(event.request);
-    //} else if (url.href.startsWith(staticUrl)) {
-    //    // TODO handle static files
     } else if (url.href.startsWith(appUrl)) {
         console.log('service worker: app request');
         const now = Date.now();
@@ -231,43 +217,4 @@ const handleFetch = async event => {
     } else {
         return await cacheFirst(event.request);
     }
-}
-
-const buildScope = async (request) => {
-    const url = new URL(request.url);
-    const method = url.method;
-    const scheme = url.protocol.slice(0, -1);
-    const hostname = url.hostname;
-    const port = url.port;
-    const path = url.pathname;
-    const query_string = url.search ? url.search.slice(1) : '';
-    const headers = {};
-    for (const [k, v] of request.headers) {
-        if (k in headers) {
-            headers[k] += ','+v;
-        } else {
-            headers[k] = v;
-        }
-    }
-    const bytes = await request.bytes();
-
-    const version = '3.0';
-    const spec_version = '2.3';
-    const state = {};
-    const scope = {
-        type: 'http',
-        asgi: {version, spec_version},
-        http_version: '1.1',
-        method,
-        scheme,
-        path, //转为bytes
-        raw_path: path, //转为bytes
-        query_string, //转为bytes
-        root_path: '',
-        headers,
-        client: ['127.0.0.1', 0],
-        server: [hostname, port],
-        state,
-    }
-    return scope;
 }
