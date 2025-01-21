@@ -16,6 +16,9 @@ const start = async (projectRoot, appSpec, appUrl, logger) => {
     pyodide = await loadPyodide();
     let end = performance.now();
     console.log(`loaded pyodide successfully in ${(end-begin).toFixed(2)}ms`);
+    // Django login need hashlib.pbkdf2_hmac, so hashlib need to be installed
+    // before import, micropip will import hashlib, so install before load micropip
+    await pyodide.loadPackage('hashlib');
     await pyodide.loadPackage('micropip');
     const response = await fetch("webcorn.py");
     const text = await response.text();
@@ -48,9 +51,13 @@ const handleRequest = async (request) => {
         } else if (isAsgi) {
             response = await pyodide.globals.get('run_asgi')(request);
         }
+
         // response.body is TypedArray, which is not transferable object,
-        // ArrayBuffer is.
+        // response.body.buffer(ArrayBuffer) is.
         response.body = response.body.buffer;
+
+        // simplify handling of seralization for postMessage
+        response.headers = JSON.stringify(response.headers);
         console.log('worker: received response from python application')
     } catch (e) {
         console.log(e);

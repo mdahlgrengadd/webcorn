@@ -33,14 +33,31 @@ class WebcornWorker {
         this.worker = new Worker(serverUrl('worker.mjs'), {type: 'module', name: this.name});
         this.wrapper = Comlink.wrap(this.worker);
         this.isWsgi = await this.wrapper.start(this.projectRoot, this.appSpec, this.appUrl, this.getLogger());
-        this.maxCount = this.isWsgi ? 1 : 1000;
+        this.maxCount = this.isWsgi ? 100 : 1000;
         this.activeCount = 0;
     }
 
     async handleRequest(request) {
+        // Add cookie header in case the client user agent forgets
+        if (document.cookie.length > 0 &&
+            !Object.keys(request.headers).some(key => key.toLowerCase() === 'cookie')) {
+            request.headers.cookie = document.cookie;
+        }
+
         Comlink.transfer(request, [request.body]);
         const response = await this.wrapper.handleRequest(request);
         Comlink.transfer(response, [response.body]);
+
+        response.headers = JSON.parse(response.headers);
+
+        // Save cookie because the user agent will remove 'set-cookie'
+        // when composing Response object due to 'Forbidden response header'
+        const setcookies = response.headers['set-cookie'] || [];
+        for (const setcookie of setcookies) {
+            document.cookie = setcookie;
+        }
+        delete response.headers['set-cookie'];
+
         return response;
     }
 

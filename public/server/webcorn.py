@@ -19,7 +19,7 @@ from js import Object
 from platform import python_implementation
 import micropip
 
-version = '0.1.0'
+version = '0.2.3'
 js_console = None
 application = None
 is_wsgi = True
@@ -165,12 +165,18 @@ async def check_django():
         from django.conf import settings
         installed_apps = settings.INSTALLED_APPS
         is_django = True
+
         # Django need tzdata
         await micropip.install('tzdata')
+
+        # Django check running event loop
+        os.environ['DJANGO_ALLOW_ASYNC_UNSAFE'] = 'true'
+
         if 'django.contrib.staticfiles' in installed_apps:
             from django.contrib.staticfiles.handlers import StaticFilesHandlerMixin
             from django.core.handlers.wsgi import WSGIHandler, get_path_info, get_script_name
-            # staticfiles.StaticFilesHandler有bug
+
+            # staticfiles.StaticFilesHandler有bug，没有考虑script_name
             class StaticFilesHandler(StaticFilesHandlerMixin, WSGIHandler):
                 def __init__(self, application):
                     self.application = application
@@ -333,14 +339,8 @@ class AsgiServer:
                 raise RuntimeError(msg % message_type)
             webcorn['response_started'] = True
             webcorn['status'] = message['status']
-            oheaders = webcorn['headers']
-            for k, v in message.get('headers', []):
-                k = k.decode().lower()
-                v = v.decode().strip()
-                if k in oheaders:
-                    oheaders[k] += ',' + v
-                else:
-                    oheaders[k] = v
+            headers = message.get('headers', [])
+            webcorn['headers'].update(normalize_headers(headers))
             path_with_query_string = scope.get('path')
             if scope.get('query_string'):
                 path_with_query_string += '?' + scope.get('query_string').decode()
@@ -468,7 +468,7 @@ class AsgiServer:
 async def start_asgi():
     global asgi_server
     # FastAPI need ssl
-    micropip.install('ssl')
+    await micropip.install('ssl')
     asgi_server = AsgiServer()
     await asgi_server.startup()
     return not asgi_server.startup_failed
@@ -583,6 +583,27 @@ class ErrorStream:
             self.console.log(msg)
 
 
+def normalize_headers(headers):
+    oheaders = {}
+    for k, v in headers:
+        k = k.lower()
+        v = v.strip()
+        if k == 'set-cookie':
+            vs = v.split(';')
+            vs = [v.strip() for v in vs if v.strip().lower() != 'httponly']
+            v = '; '.join(vs)
+            if k in oheaders:
+                oheaders[k].append(v)
+            else:
+                oheaders[k] = [v]
+        else:
+            if k in oheaders:
+                oheaders[k] += ',' + v
+            else:
+                oheaders[k] = v
+    return oheaders
+
+
 def run_wsgi(request):
     request = request.to_py()
     stdout = BytesIO()
@@ -601,14 +622,7 @@ def run_wsgi(request):
             raise AssertionError("Headers already set")
         code, _msg = status.split(None, 1)
         options['status'] = int(code)
-        oheaders = options['headers']
-        for k, v in headers:
-            k = k.lower()
-            v = v.strip()
-            if k in oheaders:
-                oheaders[k] += ',' + v
-            else:
-                oheaders[k] = v
+        options['headers'].update(normalize_headers(headers))
         return stdout.write
 
     try:
