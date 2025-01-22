@@ -27,6 +27,7 @@ is_asgi = False
 app_root = ''
 server_version = f'Webcorn/{version} {python_implementation()}/{sys.version.split()[0]}'
 is_django = False
+wsgi_server = None
 asgi_server = None
 
 class Logger:
@@ -38,6 +39,21 @@ class Logger:
     def error(self, msg, *args):
         if js_console:
             js_console.log(msg % args)
+
+
+class ErrorStream:
+    def __init__(self, console):
+        self.console = console
+
+    def flush(self):
+        pass
+
+    def write(self, msg):
+        self.console.log(msg)
+
+    def writelines(self, msgs):
+        for msg in msgs:
+            self.console.log(msg)
 
 
 def is_wsgi_app(app):
@@ -52,33 +68,6 @@ def is_wsgi_app(app):
     if len(params) != 2: # or params[0] != 'environ' or params[1] != 'start_response':
         return False
     return True
-
-    ## 尝试调用应用，确保它不会抛出异常
-    #try:
-    #    # 创建一个示例的 environ 对象
-    #    environ = {
-    #        'REQUEST_METHOD': 'GET',
-    #        'PATH_INFO': '/',
-    #        'wsgi.version': (1, 0),
-    #        'wsgi.url_scheme': 'http',
-    #        'wsgi.input': BytesIO(),
-    #        'wsgi.errors': StringIO(),
-    #        'wsgi.multithread': False,
-    #        'wsgi.multiprocess': False,
-    #        'wsgi.run_once': False,
-    #    }
-    #    
-    #    # 简单的 start_response 函数
-    #    def start_response(status, headers):
-    #        return lambda b: len(b)
-    #    
-    #    # 尝试调用应用
-    #    result = app(environ, start_response)
-    #    result = isinstance(result, Iterable)
-    #    return result
-    #except Exception as e:
-    #    print(e)
-    #return False
 
 
 def is_async_callable(obj):
@@ -102,6 +91,9 @@ def is_asgi_app(app):
 async def install_dependencies(root):
     # Django need sqlite3
     await micropip.install('sqlite3')
+
+    # FastAPI need ssl
+    await micropip.install('ssl')
 
     requirements = root / 'requirements.txt'
     if requirements.is_file():
@@ -158,41 +150,149 @@ async def setup(project_root, app_spec, app_url):
     return syspaths
 
 
-async def check_django():
-    """django开发态的静态文件处理比较特殊，需要在这里单独配置"""
-    global is_django, application
-    try:
-        from django.conf import settings
-        installed_apps = settings.INSTALLED_APPS
-        is_django = True
+def normalize_headers(headers):
+    oheaders = {}
+    for k, v in headers:
+        k = k.lower()
+        v = v.strip()
+        if k == 'set-cookie':
+            vs = v.split(';')
+            vs = [v.strip() for v in vs if v.strip().lower() != 'httponly']
+            v = '; '.join(vs)
+            if k in oheaders:
+                oheaders[k].append(v)
+            else:
+                oheaders[k] = [v]
+        else:
+            if k in oheaders:
+                oheaders[k] += ',' + v
+            else:
+                oheaders[k] = v
+    return oheaders
 
-        # Django need tzdata
-        await micropip.install('tzdata')
 
-        # Django check running event loop
-        os.environ['DJANGO_ALLOW_ASYNC_UNSAFE'] = 'true'
+class WsgiServer:
+    def __init__(self):
+        self.startup_failed = False
 
-        if 'django.contrib.staticfiles' in installed_apps:
-            from django.contrib.staticfiles.handlers import StaticFilesHandlerMixin
-            from django.core.handlers.wsgi import WSGIHandler, get_path_info, get_script_name
+    async def check_django(self):
+        """django开发态的静态文件处理比较特殊，需要在这里单独配置"""
+        global is_django, application
+        try:
+            from django.conf import settings
+            installed_apps = settings.INSTALLED_APPS
+            is_django = True
 
-            # staticfiles.StaticFilesHandler有bug，没有考虑script_name
-            class StaticFilesHandler(StaticFilesHandlerMixin, WSGIHandler):
-                def __init__(self, application):
-                    self.application = application
-                    self.base_url = urlparse(self.get_base_url())
-                    super().__init__()
+            # Django need tzdata
+            await micropip.install('tzdata')
 
-                def __call__(self, environ, start_response):
-                    script_name = get_script_name(environ)
-                    path_info = get_path_info(environ) or '/'
-                    path = f'{script_name.rstrip("/")}/{path_info.replace("/", "", 1)}'
-                    if not self._should_handle(path):
-                        return self.application(environ, start_response)
-                    return super().__call__(environ, start_response)
-            application = StaticFilesHandler(application)
-    except Exception:
-        pass
+            # Django check running event loop
+            os.environ['DJANGO_ALLOW_ASYNC_UNSAFE'] = 'true'
+
+            if 'django.contrib.staticfiles' in installed_apps:
+                from django.contrib.staticfiles.handlers import StaticFilesHandlerMixin
+                from django.core.handlers.wsgi import WSGIHandler, get_path_info, get_script_name
+
+                # staticfiles.StaticFilesHandler有bug，没有考虑script_name
+                class StaticFilesHandler(StaticFilesHandlerMixin, WSGIHandler):
+                    def __init__(self, application):
+                        self.application = application
+                        self.base_url = urlparse(self.get_base_url())
+                        super().__init__()
+
+                    def __call__(self, environ, start_response):
+                        script_name = get_script_name(environ)
+                        path_info = get_path_info(environ) or '/'
+                        path = f'{script_name.rstrip("/")}/{path_info.replace("/", "", 1)}'
+                        if not self._should_handle(path):
+                            return self.application(environ, start_response)
+                        return super().__call__(environ, start_response)
+                application = StaticFilesHandler(application)
+        except Exception:
+            pass
+
+    async def startup(self):
+        await self.check_django()
+
+    def build_environ(self, request, stderr):
+        pathname = request['path']
+        if pathname.startswith(app_root):
+            pathname = pathname[len(app_root):]
+        stdin = BytesIO(request['body'])
+        environ = {
+            'REQUEST_METHOD': request['method'],
+            'SCRIPT_NAME': app_root,
+            'PATH_INFO': pathname,
+            'QUERY_STRING': request['query'],
+            'SERVER_NAME': request['server'],
+            'SERVER_PORT': str(request['port']),
+            'SERVER_PROTOCOL': 'HTTP/1.0',
+            'wsgi.version': (1, 0),
+            'wsgi.url_scheme': request['scheme'],
+            'wsgi.input': stdin,
+            'wsgi.errors': stderr,
+            'wsgi.multithread': False,
+            'wsgi.multiprocess': True,
+            'wsgi.run_once': False,
+        }
+        headers = request['headers']
+        if 'content-type' in headers:
+            environ['CONTENT_TYPE'] = headers['content-type']
+        else:
+            environ['CONTENT_TYPE'] = 'text/plain' 
+        if 'content-length' in headers:
+            environ['CONTENT_LENGTH'] = headers['content-length']
+        else:
+            environ['CONTENT_LENGTH'] = str(len(request['body']))
+
+        for k, v in headers.items():
+            k = k.replace('-', '_').upper()
+            v = v.strip()
+            if k in environ:
+                continue
+            k = f'HTTP_{k}'
+            if k in environ:
+                environ[k] += ',' + v
+            else:
+                environ[k] = v
+        return environ
+
+
+    def handle_request(self, request):
+        stdout = BytesIO()
+        stderr = ErrorStream(js_console)
+        environ = self.build_environ(request, stderr)
+
+        options = {
+            'status': 0,
+            'headers': {
+                'server': server_version,
+            },
+        }
+
+        def start_response(status, headers, exc_info=None):
+            if options['status'] != 0 and not exc_info:
+                raise AssertionError("Headers already set")
+            code, _msg = status.split(None, 1)
+            options['status'] = int(code)
+            options['headers'].update(normalize_headers(headers))
+            return stdout.write
+
+        try:
+            app_iter = application(environ, start_response)
+            for data in app_iter:
+                stdout.write(data)
+        except Exception as e:
+            print(e)
+            raise
+        finally:
+            if app_iter and hasattr(app_iter, 'close'):
+                app_iter.close()
+        return {
+            'status': options['status'],
+            'headers': options['headers'],
+            'body': stdout.getbuffer(),
+        }
 
 
 class AsgiServer:
@@ -320,11 +420,11 @@ class AsgiServer:
         webcorn = instance['webcorn']
         await webcorn['message_event'].wait()
         webcorn['message_event'].clear()
-        result = to_js({
+        result = {
             'status': webcorn['status'],
             'headers': webcorn['headers'],
             'body': webcorn['output'].getbuffer(),
-        }, dict_converter=Object.fromEntries)
+        }
         self.delete_application_instance(instance_id)
         return result
 
@@ -339,7 +439,7 @@ class AsgiServer:
                 raise RuntimeError(msg % message_type)
             webcorn['response_started'] = True
             webcorn['status'] = message['status']
-            headers = message.get('headers', [])
+            headers = [(k.decode(), v.decode()) for (k, v) in message.get('headers', [])]
             webcorn['headers'].update(normalize_headers(headers))
             path_with_query_string = scope.get('path')
             if scope.get('query_string'):
@@ -465,10 +565,14 @@ class AsgiServer:
             instance["future"].cancel()
 
 
+async def start_wsgi():
+    global wsgi_server
+    wsgi_server = WsgiServer()
+    await wsgi_server.startup()
+    return not wsgi_server.startup_failed
+
 async def start_asgi():
     global asgi_server
-    # FastAPI need ssl
-    await micropip.install('ssl')
     asgi_server = AsgiServer()
     await asgi_server.startup()
     return not asgi_server.startup_failed
@@ -519,128 +623,18 @@ async def load_app(project_root, app_spec, app_url, console):
         raise RuntimeError(f"app object should be wsgi app or asgi app")
     application = instance
     if is_wsgi:
-        await check_django()
+        await start_wsgi()
     if is_asgi:
         await start_asgi()
 
 
-def build_environ(request, stderr):
-    pathname = request['path']
-    if pathname.startswith(app_root):
-        pathname = pathname[len(app_root):]
-    stdin = BytesIO(request['body'])
-    environ = {
-        'REQUEST_METHOD': request['method'],
-        'SCRIPT_NAME': app_root,
-        'PATH_INFO': pathname,
-        'QUERY_STRING': request['query'],
-        'SERVER_NAME': request['server'],
-        'SERVER_PORT': str(request['port']),
-        'SERVER_PROTOCOL': 'HTTP/1.0',
-        'wsgi.version': (1, 0),
-        'wsgi.url_scheme': request['scheme'],
-        'wsgi.input': stdin,
-        'wsgi.errors': stderr,
-        'wsgi.multithread': False,
-        'wsgi.multiprocess': True,
-        'wsgi.run_once': False,
-    }
-    headers = request['headers']
-    if 'content-type' in headers:
-        environ['CONTENT_TYPE'] = headers['content-type']
-    else:
-        environ['CONTENT_TYPE'] = 'text/plain' 
-    if 'content-length' in headers:
-        environ['CONTENT_LENGTH'] = headers['content-length']
-    else:
-        environ['CONTENT_LENGTH'] = str(len(request['body']))
-
-    for k, v in headers.items():
-        k = k.replace('-', '_').upper()
-        v = v.strip()
-        if k in environ:
-            continue
-        k = f'HTTP_{k}'
-        if k in environ:
-            environ[k] += ',' + v
-        else:
-            environ[k] = v
-    return environ
-
-
-class ErrorStream:
-    def __init__(self, console):
-        self.console = console
-
-    def flush(self):
-        pass
-
-    def write(self, msg):
-        self.console.log(msg)
-
-    def writelines(self, msgs):
-        for msg in msgs:
-            self.console.log(msg)
-
-
-def normalize_headers(headers):
-    oheaders = {}
-    for k, v in headers:
-        k = k.lower()
-        v = v.strip()
-        if k == 'set-cookie':
-            vs = v.split(';')
-            vs = [v.strip() for v in vs if v.strip().lower() != 'httponly']
-            v = '; '.join(vs)
-            if k in oheaders:
-                oheaders[k].append(v)
-            else:
-                oheaders[k] = [v]
-        else:
-            if k in oheaders:
-                oheaders[k] += ',' + v
-            else:
-                oheaders[k] = v
-    return oheaders
-
-
 def run_wsgi(request):
     request = request.to_py()
-    stdout = BytesIO()
-    stderr = ErrorStream(js_console)
-    environ = build_environ(request, stderr)
+    response = wsgi_server.handle_request(request)
+    return to_js(response, dict_converter=Object.fromEntries)
 
-    options = {
-        'status': 0,
-        'headers': {
-            'server': server_version,
-        },
-    }
-
-    def start_response(status, headers, exc_info=None):
-        if options['status'] != 0 and not exc_info:
-            raise AssertionError("Headers already set")
-        code, _msg = status.split(None, 1)
-        options['status'] = int(code)
-        options['headers'].update(normalize_headers(headers))
-        return stdout.write
-
-    try:
-        app_iter = application(environ, start_response)
-        for data in app_iter:
-            stdout.write(data)
-    except Exception as e:
-        print(e)
-        raise
-    finally:
-        if app_iter and hasattr(app_iter, 'close'):
-            app_iter.close()
-    result = to_js({
-        'status': options['status'],
-        'headers': options['headers'],
-        'body': stdout.getbuffer(),
-    }, dict_converter=Object.fromEntries)
-    return result
 
 async def run_asgi(request):
-    return await asgi_server.handle_request(request.to_py())
+    request = request.to_py()
+    response = await asgi_server.handle_request(request)
+    return to_js(response, dict_converter=Object.fromEntries)
