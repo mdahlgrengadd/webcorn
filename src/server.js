@@ -2,17 +2,23 @@ import * as Comlink from "comlink";
 
 const serverUrl = (path) => new URL(path, location.href);
 
-const  response = await fetch(serverUrl('config'));
-const webcornConfig = await response.json();
+const webcornConfig = {
+    pyodideUrl: null,
+    projectRoot: '/',
+    appSpec: 'app:app',
+    appUrl: 'app',
+    consoleDom: document.getElementById('console'),
+};
 
-const consoleDom = document.getElementById('console');
+const WORKER_CODE = `
+{WORKER.CODE}
+`;
+
+const WORKER_URL = URL.createObjectURL(new Blob([WORKER_CODE], {type: 'text/javascript'}));
 
 class WebcornWorker {
-    constructor(projectRoot, appSpec, appUrl) {
-        const parts = projectRoot.split('/');
-        this.projectRoot = projectRoot;
-        this.appSpec = appSpec;
-        this.appUrl = appUrl;
+    constructor() {
+        const parts = webcornConfig.projectRoot.split('/');
         this.name = parts[parts.length-1];
     }
 
@@ -24,15 +30,19 @@ class WebcornWorker {
                 const content = document.createElement('span');
                 content.textContent = msg;
                 p.appendChild(content);
-                consoleDom.append(p);
+                webcornConfig.consoleDom.append(p);
             }
         });
     }
 
     async start() {
-        this.worker = new Worker(serverUrl('worker.mjs'), {type: 'module', name: this.name});
+        this.worker = new Worker(WORKER_URL, {type: 'module', name: this.name});
         this.wrapper = Comlink.wrap(this.worker);
-        this.isWsgi = await this.wrapper.start(this.projectRoot, this.appSpec, this.appUrl, this.getLogger());
+        this.isWsgi = await this.wrapper.start(webcornConfig.pyodideUrl,
+                                               webcornConfig.projectRoot,
+                                               webcornConfig.appSpec,
+                                               webcornConfig.appUrl,
+                                               this.getLogger());
         this.maxCount = this.isWsgi ? 100 : 1000;
         this.activeCount = 0;
     }
@@ -86,9 +96,13 @@ const retainWorker = async () => {
             return worker;
         }
     }
+    if (!webcornConfig.pyodideUrl) {
+        console.log("Webcorn is not configed, config first with configWebcorn(options).");
+        return null;
+    }
     worker = null;
     try {
-        worker = new WebcornWorker(webcornConfig.projectRoot, webcornConfig.appSpec, webcornConfig.appUrl);
+        worker = new WebcornWorker();
         await worker.start();
         workers.push(worker);
         worker.retain();
@@ -134,4 +148,22 @@ if (navigator.serviceWorker.controller) {
     ping();
     Comlink.expose({ handleRequest }, requestPort1);
     navigator.serviceWorker.controller.postMessage({type: 'server-ready'}, [pingPort2, requestPort2]);
+}
+
+export function configWebcorn(options) {
+    const {
+        // pyodide -1.26.4没有wagtail依赖的pillow-heif版本，运行wagtail时，需要使用0.27.0
+        // pyodide -1.27.0/0.27.1有[pydantic/pydantic-core版本不匹配的bug](https://github.com/pyodide/pyodide/issues/5336)
+        // 运行fastapi app时需要使用-1.26.4，直到0.27.2解决这个问题。
+        pyodideUrl = "https://cdn.jsdelivr.net/pyodide/v-1.26.4/full/pyodide.mjs",
+        projectRoot = '/',
+        appSpec = 'app:app',
+        appUrl = 'app',
+        consoleDom = document.getElementById('console'),
+    } = options || {};
+    webcornConfig.pyodideUrl = pyodideUrl;
+    webcornConfig.projectRoot = projectRoot;
+    webcornConfig.appSpec = appSpec;
+    webcornConfig.appUrl = appUrl;
+    webcornConfig.consoleDom = consoleDom;
 }

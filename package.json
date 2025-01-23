@@ -6,7 +6,7 @@
   "type": "module",
   "scripts": {
     "start": "cd dist && python -m http.server",
-    "build": "rollup -c"
+    "build": "node replacepy.js && rollup -c worker.rollup.config.js && node replacejs.js && rollup -c"
   },
   "keywords": [],
   "author": "zenkj",
