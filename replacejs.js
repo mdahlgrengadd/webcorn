@@ -10,7 +10,7 @@ fs.readFile('build/worker.mjs', 'utf8', (err, data) => {
         return;
     }
 
-    const code = data.replace(/`/g, '\\`');
+    const code = data.replace(/\\/g, '\\\\').replace(/`/g, '\\`').replace(/\${/g, '\\${');
 
     // 读取目标文件
     fs.readFile('src/server.js', 'utf8', (err, targetData) => {
