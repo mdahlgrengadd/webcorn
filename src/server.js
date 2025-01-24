@@ -1,7 +1,5 @@
 import * as Comlink from "comlink";
 
-const serverUrl = (path) => new URL(path, location.href);
-
 const webcornConfig = {
     pyodideUrl: null,
     projectRoot: '/',
@@ -137,24 +135,56 @@ const handleRequest = async (request) => {
     }
 }
 
-if (navigator.serviceWorker.controller) {
-    const { port1: pingPort1, port2: pingPort2 } = new MessageChannel();
-    const { port1: requestPort1, port2: requestPort2 } = new MessageChannel();
-    const pingTarget = Comlink.wrap(pingPort1);
-    const ping = async () => {
-        await pingTarget.ping();
-        setTimeout(ping, 300);
+export const eventToRequest = async (event) => {
+    const url = new URL(event.request.url);
+    const method = event.request.method;
+    const scheme = url.protocol.slice(0, -1);
+    const server = url.hostname;
+    const port = url.port;
+    const path = url.pathname;
+    const query = url.search ? url.search.slice(1) : '';
+    const headers = {};
+    for (const [k, v] of event.request.headers) {
+        if (k in headers) {
+            headers[k] += ','+v;
+        } else {
+            headers[k] = v;
+        }
     }
-    ping();
-    Comlink.expose({ handleRequest }, requestPort1);
-    navigator.serviceWorker.controller.postMessage({type: 'server-ready'}, [pingPort2, requestPort2]);
-}
+    const body = await event.request.arrayBuffer();
 
-export function configWebcorn(options) {
+    let request = {
+        method,
+        scheme,
+        server,
+        port,
+        path,
+        query,
+        headers,
+        body
+    };
+    
+    Comlink.transfer(request, [request.body]);
+    return request;
+};
+
+
+export const startServer = (options) => {
+    if (!options.serverName) {
+        const msg = "Server name should be specified.";
+        console.log(msg);
+        throw msg;
+    }
+    if (!navigator.serviceWorker.controller) {
+        const msg = "Service Worker is not started, failed to start webcorn server!";
+        console.log(msg);
+        throw msg;
+    }
     const {
-        // pyodide -1.26.4没有wagtail依赖的pillow-heif版本，运行wagtail时，需要使用0.27.0
-        // pyodide -1.27.0/0.27.1有[pydantic/pydantic-core版本不匹配的bug](https://github.com/pyodide/pyodide/issues/5336)
-        // 运行fastapi app时需要使用-1.26.4，直到0.27.2解决这个问题。
+        serverName,
+        // pyodide v0.26.4没有wagtail依赖的pillow-heif版本，运行wagtail时，需要使用0.27.0
+        // pyodide v0.27.0/0.27.1有[pydantic/pydantic-core版本不匹配的bug](https://github.com/pyodide/pyodide/issues/5336)
+        // 运行fastapi app时需要使用0.26.4，直到0.27.2解决这个问题。
         pyodideUrl = "https://cdn.jsdelivr.net/pyodide/v-1.26.4/full/pyodide.mjs",
         projectRoot = '/',
         appSpec = 'app:app',
@@ -166,4 +196,19 @@ export function configWebcorn(options) {
     webcornConfig.appSpec = appSpec;
     webcornConfig.appUrl = appUrl;
     webcornConfig.consoleDom = consoleDom;
+
+    const { port1: pingPort1, port2: pingPort2 } = new MessageChannel();
+    const { port1: requestPort1, port2: requestPort2 } = new MessageChannel();
+    const pingTarget = Comlink.wrap(pingPort1);
+    let serverId = null;
+    const ping = async () => {
+        await pingTarget.ping(serverId);
+        setTimeout(ping, 300);
+    }
+    const readyGo = (sid) => {
+        serverId = sid;
+        ping();
+    }
+    Comlink.expose({ handleRequest, readyGo }, requestPort1);
+    navigator.serviceWorker.controller.postMessage({type: 'server-ready', name: serverName}, [pingPort2, requestPort2]);
 }

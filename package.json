@@ -2,8 +2,6 @@
   "name": "webcorn",
   "version": "0.2.3",
   "description": "ASGI/WSGI Server running in a browser",
-  "main": "index.js",
-  "type": "module",
   "scripts": {
     "start": "cd dist && python -m http.server",
     "build": "node replacepy.js && rollup -c worker.rollup.config.js && node replacejs.js && rollup -c"
@@ -11,6 +9,9 @@
   "keywords": [],
   "author": "zenkj",
   "license": "MIT",
+  "exports": {
+
+  },
   "dependencies": {
     "comlink": "^4.4.2",
     "pyodide": "^0.26.4"
