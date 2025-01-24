@@ -8,11 +8,11 @@ const webcornConfig = {
     consoleDom: document.getElementById('console'),
 };
 
-const WORKER_CODE = `
-{WORKER.CODE}
+const WORKER_JS = `
+{WORKER.JS}
 `;
 
-const WORKER_URL = URL.createObjectURL(new Blob([WORKER_CODE], {type: 'text/javascript'}));
+const WORKER_URL = URL.createObjectURL(new Blob([WORKER_JS], {type: 'text/javascript'}));
 
 class WebcornWorker {
     constructor() {
@@ -134,40 +134,6 @@ const handleRequest = async (request) => {
         body: "server internal error",
     }
 }
-
-export const eventToRequest = async (event) => {
-    const url = new URL(event.request.url);
-    const method = event.request.method;
-    const scheme = url.protocol.slice(0, -1);
-    const server = url.hostname;
-    const port = url.port;
-    const path = url.pathname;
-    const query = url.search ? url.search.slice(1) : '';
-    const headers = {};
-    for (const [k, v] of event.request.headers) {
-        if (k in headers) {
-            headers[k] += ','+v;
-        } else {
-            headers[k] = v;
-        }
-    }
-    const body = await event.request.arrayBuffer();
-
-    let request = {
-        method,
-        scheme,
-        server,
-        port,
-        path,
-        query,
-        headers,
-        body
-    };
-    
-    Comlink.transfer(request, [request.body]);
-    return request;
-};
-
 
 export const startServer = (options) => {
     if (!options.serverName) {

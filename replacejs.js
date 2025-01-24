@@ -1,7 +1,7 @@
-import fs from 'fs';
+const fs = require('fs');
 
 // 要替换的字符串
-const placeholder = '{WORKER.CODE}';
+const placeholder = '{WORKER.JS}';
 
 // 读取要替换的内容的文件
 fs.readFile('build/worker.mjs', 'utf8', (err, data) => {

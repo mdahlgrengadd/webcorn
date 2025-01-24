@@ -8,7 +8,12 @@ export default [
         output: [
             {
                 file: 'dist/server.mjs',
-                format: 'es'
+                format: 'esm'
+            },
+            {
+                name: 'Webcorn',
+                file: 'dist/server.js',
+                format: 'umd'
             },
         ],
         plugins: [
@@ -17,11 +22,18 @@ export default [
         ]
     },
     {
-        input: 'src/service-worker.js',
-        output: {
-            file: 'dist/service-worker.mjs',
-            format: 'es'
-        },
+        input: 'src/sw.js',
+        output: [
+            {
+                file: 'dist/service-worker.mjs',
+                format: 'esm'
+            },
+            {
+                name: "Webcorn",
+                file: 'dist/service-worker.js',
+                format: 'umd'
+            },
+        ],
         plugins: [
             resolve(),
             commonjs(),

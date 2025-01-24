@@ -1,4 +1,4 @@
-import fs from 'fs';
+const fs = require('fs');
 
 // 要替换的字符串
 const placeholder = '{WEBCORN.PY}';

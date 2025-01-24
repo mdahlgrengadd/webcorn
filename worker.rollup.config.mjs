@@ -7,7 +7,7 @@ export default [
         output: [
             {
                 file: 'build/worker.mjs',
-                format: 'es'
+                format: 'esm'
             },
         ],
         plugins: [

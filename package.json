@@ -4,13 +4,24 @@
   "description": "ASGI/WSGI Server running in a browser",
   "scripts": {
     "start": "cd dist && python -m http.server",
-    "build": "node replacepy.js && rollup -c worker.rollup.config.js && node replacejs.js && rollup -c"
+    "build": "node replacepy.js && rollup -c worker.rollup.config.mjs && node replacejs.js && rollup -c"
   },
   "keywords": [],
   "author": "zenkj",
   "license": "MIT",
   "exports": {
-
+    "./server": {
+      "require": "./dist/server.js",
+      "import": "./dist/server.mjs"
+    },
+    "./service-worker": {
+      "require": "./dist/service-worker.js",
+      "import": "./dist/service-worker.mjs"
+    },
+    "./server.js": "./dist/server.js",
+    "./server.mjs": "./dist/server.mjs",
+    "./service-worker.js": "./dist/service-worker.js",
+    "./service-worker.mjs": "./dist/service-worker.mjs"
   },
   "dependencies": {
     "comlink": "^4.4.2",
@@ -24,6 +35,10 @@
   },
   "files": [
     "dist",
-    "src"
+    "src",
+    "worker.rollup.config.mjs",
+    "replacepy.js",
+    "replacejs.js",
+    "rollup.config.mjs"
   ]
 }
