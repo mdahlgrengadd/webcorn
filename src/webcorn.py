@@ -19,7 +19,7 @@ from js import Object
 from platform import python_implementation
 import micropip
 
-version = '0.2.3'
+version = '0.2.4'
 js_console = None
 application = None
 is_wsgi = True
@@ -121,7 +121,7 @@ async def setup(project_root, app_spec, app_url):
     global app_root
     path = Path(project_root)
     if not path.is_dir():
-        zipurl = urljoin(app_url, f'../{path.name}.zip')
+        zipurl = urljoin(app_url, f'{path.name}.zip')
         response = await pyfetch(zipurl)
         await response.unpack_archive(extract_dir=path.parent)
     os.chdir(project_root)

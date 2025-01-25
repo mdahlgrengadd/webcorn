@@ -1,0 +1,14 @@
+{
+  "name": "fastapi_app",
+  "version": "1.0.0",
+  "scripts": {
+    "build": "rollup -c"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "webcorn": "file:../.."
+  }
+}

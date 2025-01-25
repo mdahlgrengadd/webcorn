@@ -17,8 +17,8 @@
         const logContainer = document.getElementById('console');
         window.addEventListener('load', () => {
             if ('serviceWorker' in navigator) {
-                const serviceWorkerScript = "{{ url_for('static', filename='service-worker.mjs') }}";
-                const scope = "{{ url_for('static', filename='project_fastapi') }}";
+                const serviceWorkerScript = "/sw.mjs";
+                const scope = "/";
                 const type = 'module';
                 navigator.serviceWorker.register(serviceWorkerScript, {type, scope})
                     .then(registration => {
@@ -26,7 +26,7 @@
                         setTimeout(()=>{
                             logContainer.innerHTML = `
                                 <iframe style="display: block; height: 400px; width: 600px; border:1px; overflow: scroll;"
-                                        src="{{ url_for('static', filename='project_fastapi/server/index.html') }}"></iframe>
+                                        src="/project_flask/server.html"></iframe>
                             `;
                         }, 1000);
                     })

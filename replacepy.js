@@ -27,8 +27,10 @@ fs.readFile('src/webcorn.py', 'utf8', (err, data) => {
             return;
         }
 
+        const code = data.replace(/\\/g, '\\\\').replace(/`/g, '\\`').replace(/\${/g, '\\${');
+
         // 替换目标文件中的指定字符串
-        const updatedData = targetData.replace(placeholder, data);
+        const updatedData = targetData.replace(placeholder, code);
 
         ensureDir('build')
 

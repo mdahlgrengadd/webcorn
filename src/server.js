@@ -151,9 +151,10 @@ export const startServer = (options) => {
     const {
         serverName,
         // pyodide v0.26.4没有wagtail依赖的pillow-heif版本，运行wagtail时，需要使用0.27.0
-        // pyodide v0.27.0/0.27.1有[pydantic/pydantic-core版本不匹配的bug](https://github.com/pyodide/pyodide/issues/5336)
-        // 运行fastapi app时需要使用0.26.4，直到0.27.2解决这个问题。
-        pyodideUrl = "https://cdn.jsdelivr.net/pyodide/v-1.26.4/full/pyodide.mjs",
+        // pyodide v0.27.0/0.27.1有[pydantic/pydantic-core版本不匹配的bug](https://github.com/pyodide/pyodide/issues/5336)，
+        // 导致运行fastapi app时出错
+        // 2025.1.24: 0.27.2解决了这个问题。
+        pyodideUrl = "https://cdn.jsdelivr.net/pyodide/v0.27.2/full/pyodide.mjs",
         projectRoot = '/',
         appSpec = 'app:app',
         appUrl = 'app',

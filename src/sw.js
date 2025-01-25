@@ -79,7 +79,7 @@ export const acceptServer = () => {
             const requestPort = event.ports[1];
             Comlink.expose({ping}, pingPort);
             const endpoint = Comlink.wrap(requestPort);
-            const server = WebcornServer(data.name, endpoint);
+            const server = new WebcornServer(data.name, endpoint);
             webcornServers[server.serverId] = server;
         }
     })
