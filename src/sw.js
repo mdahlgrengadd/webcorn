@@ -98,7 +98,7 @@ export const allServers = () => {
 
 // client will use this function to handle fetch event
 // serverName is the name of the server
-export const handleFetch = async (serverName, event) => {
+export const handleAppFetch = async (serverName, event) => {
     const now = Date.now();
     const servers = Object.values(webcornServers).filter(server => server.serverName === serverName && server.isActive(now));
     if (servers.length === 1) {

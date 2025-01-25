@@ -5,7 +5,7 @@ const webcornConfig = {
     projectRoot: '/',
     appSpec: 'app:app',
     appUrl: 'app',
-    consoleDom: document.getElementById('console'),
+    consoleDom: null,
 };
 
 const WORKER_JS = `
@@ -23,12 +23,14 @@ class WebcornWorker {
     getLogger() {
         return Comlink.proxy({
             log: (msg) => {
-                const p = document.createElement('p');
-                p.innerHTML = `<span class="source">${this.name}:</span>`;
-                const content = document.createElement('span');
-                content.textContent = msg;
-                p.appendChild(content);
-                webcornConfig.consoleDom.append(p);
+                if (webcornConfig.consoleDom) {
+                    const p = document.createElement('p');
+                    p.innerHTML = `<span class="source">${this.name}:</span>`;
+                    const content = document.createElement('span');
+                    content.textContent = msg;
+                    p.appendChild(content);
+                    webcornConfig.consoleDom.append(p);
+                }
             }
         });
     }
@@ -155,13 +157,13 @@ export const startServer = (options) => {
         projectRoot = '/',
         appSpec = 'app:app',
         appUrl = 'app',
-        consoleDom = document.getElementById('console'),
+        consoleDom = null,
     } = options || {};
     webcornConfig.pyodideUrl = pyodideUrl;
     webcornConfig.projectRoot = projectRoot;
     webcornConfig.appSpec = appSpec;
     webcornConfig.appUrl = appUrl;
-    webcornConfig.consoleDom = consoleDom;
+    webcornConfig.consoleDom = consoleDom || document.getElementById('console');
 
     const { port1: pingPort1, port2: pingPort2 } = new MessageChannel();
     const { port1: requestPort1, port2: requestPort2 } = new MessageChannel();
