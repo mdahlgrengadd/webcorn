@@ -138,18 +138,12 @@ const handleRequest = async (request) => {
 }
 
 export const startServer = (options) => {
-    if (!options.serverName) {
-        const msg = "Server name should be specified.";
-        console.log(msg);
-        throw msg;
-    }
     if (!navigator.serviceWorker.controller) {
         const msg = "Service Worker is not started, failed to start webcorn server!";
         console.log(msg);
         throw msg;
     }
     const {
-        serverName,
         // pyodide v0.26.4没有wagtail依赖的pillow-heif版本，运行wagtail时，需要使用0.27.0
         // pyodide v0.27.0/0.27.1有[pydantic/pydantic-core版本不匹配的bug](https://github.com/pyodide/pyodide/issues/5336)，
         // 导致运行fastapi app时出错
@@ -157,14 +151,16 @@ export const startServer = (options) => {
         pyodideUrl = "https://cdn.jsdelivr.net/pyodide/v0.27.2/full/pyodide.mjs",
         projectRoot = '/',
         appSpec = 'app:app',
-        appUrl = 'app',
         consoleDom = null,
     } = options || {};
     webcornConfig.pyodideUrl = pyodideUrl;
     webcornConfig.projectRoot = projectRoot;
     webcornConfig.appSpec = appSpec;
-    webcornConfig.appUrl = appUrl;
-    webcornConfig.consoleDom = consoleDom || document.getElementById('console');
+    webcornConfig.consoleDom = consoleDom;
+    webcornConfig.appUrl = new URL('./~', self.location).href;
+
+    const serverUrl = new URL('.', self.location).href;
+    const serverName = serverUrl.replace(/\/$/, '').split('/').pop();
 
     const { port1: pingPort1, port2: pingPort2 } = new MessageChannel();
     const { port1: requestPort1, port2: requestPort2 } = new MessageChannel();
