@@ -137,7 +137,7 @@ const handleRequest = async (request) => {
     }
 }
 
-export const startServer = (options) => {
+export const startAppServer = (options) => {
     if (!navigator.serviceWorker.controller) {
         const msg = "Service Worker is not started, failed to start webcorn server!";
         console.log(msg);
@@ -157,7 +157,7 @@ export const startServer = (options) => {
     webcornConfig.projectRoot = projectRoot;
     webcornConfig.appSpec = appSpec;
     webcornConfig.consoleDom = consoleDom;
-    webcornConfig.appUrl = new URL('./~', self.location).href;
+    webcornConfig.appUrl = new URL('./~webcorn', self.location).href;
 
     const serverUrl = new URL('.', self.location).href;
     const serverName = serverUrl.replace(/\/$/, '').split('/').pop();

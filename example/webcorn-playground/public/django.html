@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Webcorn Server - Django Application</title>
+    <link type="text/css" rel="stylesheet" href="/style.css">
+  </head>
+  <body>
+    <div class="container">
+      <!-- Main content area -->
+      <div class="main-content">
+          <!-- Terminal -->
+          <div class="terminal">
+              <div class="terminal-header">
+                  <span>Webcorn Server</span>
+              </div>
+              <div class="terminal-content" id="console">
+                  <div class="terminal-line">$ npm start</div>
+                  <div class="terminal-line">Server running at http://localhost:3000</div>
+              </div>
+          </div>
+      </div>
+
+      <!-- Resizer for preview -->
+      <div class="resizer" id="preview-resizer"></div>
+
+      <!-- Right preview panel -->
+      <div class="preview">
+          <div class="preview-header">
+              <h3>PREVIEW</h3>
+          </div>
+          <div class="preview-content">
+              <iframe id="previewFrame" src="about:blank"></iframe>
+          </div>
+      </div>
+    </div>
+    <script type="module" src="./django.mjs"></script>
+  </body>
+</html>

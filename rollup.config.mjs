@@ -1,6 +1,5 @@
 import commonjs from '@rollup/plugin-commonjs';
 import resolve from '@rollup/plugin-node-resolve';
-import copy from 'rollup-plugin-copy';
 
 export default [
     {
@@ -22,7 +21,7 @@ export default [
         ]
     },
     {
-        input: 'src/sw.js',
+        input: 'src/service-worker.js',
         output: [
             {
                 file: 'dist/service-worker.mjs',
