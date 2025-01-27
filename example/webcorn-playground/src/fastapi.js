@@ -90,6 +90,19 @@ addressInput.addEventListener('keydown', (e) => {
     }
 });
 
+const updateAddressValue = () => {
+    if (document.activeElement !== addressInput) {
+        const href = previewFrame.contentWindow.location.href;
+        if (href !== addressInput.value) {
+            addressInput.value = href;
+        }
+    }
+
+    setTimeout(updateAddressValue, 100);
+}
+
+updateAddressValue();
+
 const refreshButton = document.getElementById('refreshButton');
 refreshButton.addEventListener('click', () => {
     appUrl = addressInput.value;

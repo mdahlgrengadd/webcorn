@@ -3,7 +3,21 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Webcorn Server - Django Application</title>
+    <title>Webcorn Server</title>
+  </head>
+  <body>
+    <div id="console">
+    </div>
+    <script type="module" src="./wagtail.mjs"></script>
+  </body>
+</html>
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Webcorn Server - Wagtail Application</title>
     <style>
         * {
             margin: 0;
@@ -202,7 +216,7 @@
             </div>
           </div>
           <div class="preview-content">
-              <iframe id="previewFrame" src="about:blank"></iframe>
+              <iframe id="previewFrame" src="../loading.html"></iframe>
           </div>
       </div>
 
@@ -211,15 +225,15 @@
       <div class="main-content">
           <div class="terminal">
               <div class="terminal-header">
-                  <span>Webcorn Server - Django application</span>
+                  <span>Webcorn Server - Wagtail application</span>
               </div>
               <div class="terminal-content" id="console">
-                  <div class="terminal-line">Start webcorn server</div>
+                  <div class="terminal-line">Starting webcorn server...</div>
                   <div class="terminal-line">Username/Password:  admin/admin</div>
               </div>
           </div>
       </div>
     </div>
-    <script type="module" src="./django.mjs"></script>
+    <script type="module" src="./wagtail.mjs"></script>
   </body>
 </html>

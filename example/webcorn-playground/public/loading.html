@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Webcorn Application</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background-color: #1a1a1a;
+            font-family: 'Arial', sans-serif;
+        }
+
+        .loading {
+            color: white;
+            font-size: 40px;
+            text-align: center;
+            position: absolute;
+        }
+    </style>
+</head>
+<body>
+    <div class="loading">Loading...</div>
+    <script>
+        const messages = [
+            'Loading',
+            'Loading.',
+            'Loading..',
+            'Loading...',
+            'Loading....',
+            'Loading.....',
+            'Loading......',
+        ];
+        let index = 0;
+
+        const loading = document.querySelector('.loading');
+        const updateLoading = () => {
+            loading.textContent = messages[(index++) % messages.length];
+            setTimeout(updateLoading, 1000);
+        }
+        updateLoading();
+    </script>
+</body>
+</html>

@@ -735,7 +735,7 @@ from js import Object
 from platform import python_implementation
 import micropip
 
-version = '0.2.4'
+version = '0.2.5'
 js_console = None
 application = None
 is_wsgi = True
@@ -1360,12 +1360,12 @@ async def run_asgi(request):
 const start = async (pyodideUrl, projectRoot, appSpec, appUrl, logger) => {
     console$1 = logger;
     let begin = performance.now();
-    console$1.log("loading pyodide");
+    console$1.log("Loading pyodide...");
     const { loadPyodide } = await import(pyodideUrl);
     pyodide = await loadPyodide();
     let end = performance.now();
     let delta = (end-begin).toFixed(2);
-    console$1.log(\`loaded pyodide successfully in \${delta}ms\`);
+    console$1.log(\`Loaded pyodide successfully in \${delta}ms\`);
     // Django login need hashlib.pbkdf2_hmac, so hashlib need to be installed
     // before import, micropip will import hashlib, so install before load micropip
     await pyodide.loadPackage('hashlib');
@@ -1491,7 +1491,7 @@ class WebcornWorker {
         }
         delete response.headers['set-cookie'];
 
-        // Remove X-Frame-Options in favour of webcorn
+        // Remove X-Frame-Options in case webcorn client runs in an iframe
         delete response.headers['x-frame-options'];
 
         return response;
@@ -1605,8 +1605,8 @@ const startAppServer = (options) => {
 };
 
 const options = {
-        projectRoot: '/opt/project_wagtail',
-        appSpec: 'project_wagtail.wsgi:application',
+        projectRoot: '/opt/project_fastapi',
+        appSpec: 'src/app:app',
         log: addTerminalLine,
 };
 try {
@@ -1678,7 +1678,7 @@ initializeResizer(previewResizer,
 setTimeout(() => addTerminalLine('Loading...'), 1000);
 
 
-let appUrl = new URL('./~webcorn', self.location).href;
+let appUrl = new URL('./~webcorn/docs', self.location).href;
 
 const addressInput = document.querySelector('.address-input');
 addressInput.value = appUrl;
@@ -1693,6 +1693,19 @@ addressInput.addEventListener('keydown', (e) => {
         previewFrame.src = appUrl;
     }
 });
+
+const updateAddressValue = () => {
+    if (document.activeElement !== addressInput) {
+        const href = previewFrame.contentWindow.location.href;
+        if (href !== addressInput.value) {
+            addressInput.value = href;
+        }
+    }
+
+    setTimeout(updateAddressValue, 100);
+};
+
+updateAddressValue();
 
 const refreshButton = document.getElementById('refreshButton');
 refreshButton.addEventListener('click', () => {
