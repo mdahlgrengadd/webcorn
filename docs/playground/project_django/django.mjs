@@ -1717,3 +1717,8 @@ const homeButton = document.getElementById('homeButton');
 homeButton.addEventListener('click', () => {
     window.location = new URL('../', window.location).href;
 });
+
+const githubButton = document.getElementById('githubButton');
+githubButton.addEventListener('click', () => {
+    window.location = 'https://github.com/frybox/webcorn';
+});
