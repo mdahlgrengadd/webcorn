@@ -1,5 +1,5 @@
 # Webcorn
-[中文](./README_zh.md)
+[中文](https://github.com/frybox/webcorn/blob/main/README_zh.md)
 
 Webcorn is a Python ASGI/WSGI application server that runs in the browser, assisting in providing a complete offline Python web development experience.
 
