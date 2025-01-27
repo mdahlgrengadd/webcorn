@@ -24,14 +24,12 @@
     "./service-worker.mjs": "./dist/service-worker.mjs"
   },
   "dependencies": {
-    "comlink": "^4.4.2",
-    "pyodide": "^0.27.2"
+    "comlink": "^4.4.2"
   },
   "devDependencies": {
     "@rollup/plugin-commonjs": "^28.0.2",
     "@rollup/plugin-node-resolve": "^16.0.0",
-    "rollup": "^4.28.1",
-    "rollup-plugin-copy": "^3.5.0"
+    "rollup": "^4.28.1"
   },
   "files": [
     "dist",

@@ -113,7 +113,6 @@ const handleFetch = async event => {
         const index = path.indexOf('/');
         const serverName = index >= 0 ? path.substring(0, index) : path;
         const fileName = index >= 0 ? path.substring(index) : '';
-        console.log(`path = ${path}, serverName = ${serverName}, fileName = ${fileName}`);
         if (fileName === '/~webcorn' || fileName.startsWith('/~webcorn/')) {
             const now = Date.now();
             const servers = Object.values(webcornServers).filter(server => server.serverName === serverName && server.isActive(now));
