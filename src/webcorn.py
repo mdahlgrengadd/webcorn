@@ -225,7 +225,7 @@ class WsgiServer:
             'PATH_INFO': pathname,
             'QUERY_STRING': request['query'],
             'SERVER_NAME': request['server'],
-            'SERVER_PORT': str(request['port']),
+            'SERVER_PORT': str(request['port']) or ('443' if request['scheme'] == 'https' else '80'),
             'SERVER_PROTOCOL': 'HTTP/1.0',
             'wsgi.version': (1, 0),
             'wsgi.url_scheme': request['scheme'],
