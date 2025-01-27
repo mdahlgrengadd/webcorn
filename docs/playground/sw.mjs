@@ -448,6 +448,31 @@ const cacheFirst = async (req) => {
     }
 };
 
+const networkFirst = async (req) => {
+    const url = new URL(req.url);
+    const scheme = url.protocol.slice(0, -1);
+    try {
+        const newres = await fetch(req);
+        if (scheme === 'https' || scheme === 'http') {
+            const cache = await caches.open(currentVersion);
+            await cache.put(req, newres.clone());
+        }
+        return newres;
+    } catch (err) {
+        const res = await caches.match(req);
+        if (res) {
+            console.log("response from cache");
+            return res;
+        } else {
+            return new Response("Network error!!!", {
+                status: 408,
+                headers: {"Content-Type": "text/plain; charset=utf-8"},
+            });
+        }
+    
+    }
+};
+
 const handleFetch = async event => {
     const url = new URL(event.request.url);
 
@@ -460,7 +485,6 @@ const handleFetch = async event => {
         const index = path.indexOf('/');
         const serverName = index >= 0 ? path.substring(0, index) : path;
         const fileName = index >= 0 ? path.substring(index) : '';
-        console.log(`path = ${path}, serverName = ${serverName}, fileName = ${fileName}`);
         if (fileName === '/~webcorn' || fileName.startsWith('/~webcorn/')) {
             const now = Date.now();
             const servers = Object.values(webcornServers).filter(server => server.serverName === serverName && server.isActive(now));
@@ -479,6 +503,8 @@ const handleFetch = async event => {
                     },
                 });
             }
+        } else if (fileName.endsWith('.zip')) {
+            return await networkFirst(event.request);
         }
     }
     return await cacheFirst(event.request);
