@@ -5,7 +5,7 @@ const webcornConfig = {
     projectRoot: '/',
     appSpec: 'app:app',
     appUrl: 'app',
-    consoleDom: null,
+    log: null,
 };
 
 const WORKER_JS = `
@@ -14,6 +14,28 @@ const WORKER_JS = `
 
 const WORKER_URL = URL.createObjectURL(new Blob([WORKER_JS], {type: 'text/javascript'}));
 
+const consoleLog = (msg) => {
+    if (webcornConfig.log) {
+        webcornConfig.log(msg);
+    }
+}
+
+const accessLog = (request, response) => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth()+1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    const hours = String(now.getHours()).padStart(2, '0');
+    const minutes = String(now.getMinutes()).padStart(2, '0');
+    const seconds = String(now.getSeconds()).padStart(2, '0');
+    const time = `[${year}-${month}-${day} ${hours}:${minutes}:${seconds}]`;
+    const method = request.method;
+    let path = request.path;
+    if (request.query) path += '?' + request.query;
+    const status = response.status;
+    consoleLog(`${time} "${method} ${path}" ${status}`)
+}
+
 class WebcornWorker {
     constructor() {
         const parts = webcornConfig.projectRoot.split('/');
@@ -21,18 +43,7 @@ class WebcornWorker {
     }
 
     getLogger() {
-        return Comlink.proxy({
-            log: (msg) => {
-                if (webcornConfig.consoleDom) {
-                    const p = document.createElement('p');
-                    p.innerHTML = `<span class="source">${this.name}:</span>`;
-                    const content = document.createElement('span');
-                    content.textContent = msg;
-                    p.appendChild(content);
-                    webcornConfig.consoleDom.append(p);
-                }
-            }
-        });
+        return Comlink.proxy({ log: consoleLog });
     }
 
     async start() {
@@ -60,6 +71,8 @@ class WebcornWorker {
 
         response.headers = JSON.parse(response.headers);
 
+        accessLog(request, response);
+
         // Save cookie because the user agent will remove 'set-cookie'
         // when composing Response object due to 'Forbidden response header'
         const setcookies = response.headers['set-cookie'] || [];
@@ -67,6 +80,9 @@ class WebcornWorker {
             document.cookie = setcookie;
         }
         delete response.headers['set-cookie'];
+
+        // Remove X-Frame-Options in case webcorn client runs in an iframe
+        delete response.headers['x-frame-options'];
 
         return response;
     }
@@ -97,7 +113,7 @@ const retainWorker = async () => {
         }
     }
     if (!webcornConfig.pyodideUrl) {
-        console.log("Webcorn is not configed, config first with configWebcorn(options).");
+        consoleLog("Webcorn is not configed, config first with configWebcorn(options).");
         return null;
     }
     worker = null;
@@ -108,7 +124,7 @@ const retainWorker = async () => {
         worker.retain();
         return worker;
     } catch (e) {
-        console.log(e);
+        consoleLog(e);
         // TODO do something?
     }
 };
@@ -122,7 +138,7 @@ const handleRequest = async (request) => {
             return response;
         }
     } catch (e) {
-        console.log(e);
+        consoleLog(e);
     } finally {
         if (worker) {
             worker.release();
@@ -140,7 +156,7 @@ const handleRequest = async (request) => {
 export const startAppServer = (options) => {
     if (!navigator.serviceWorker.controller) {
         const msg = "Service Worker is not started, failed to start webcorn server!";
-        console.log(msg);
+        consoleLog(msg);
         throw msg;
     }
     const {
@@ -151,12 +167,12 @@ export const startAppServer = (options) => {
         pyodideUrl = "https://cdn.jsdelivr.net/pyodide/v0.27.2/full/pyodide.mjs",
         projectRoot = '/',
         appSpec = 'app:app',
-        consoleDom = null,
+        log = null,
     } = options || {};
     webcornConfig.pyodideUrl = pyodideUrl;
     webcornConfig.projectRoot = projectRoot;
     webcornConfig.appSpec = appSpec;
-    webcornConfig.consoleDom = consoleDom;
+    webcornConfig.log = log;
     webcornConfig.appUrl = new URL('./~webcorn', self.location).href;
 
     const serverUrl = new URL('.', self.location).href;

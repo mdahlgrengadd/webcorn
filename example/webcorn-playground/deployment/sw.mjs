@@ -511,7 +511,7 @@ const startWebServer = () => {
             const requestPort = event.ports[1];
             expose({ping}, pingPort);
             const endpoint = wrap(requestPort);
-            const server = WebcornServer(data.name, endpoint);
+            const server = new WebcornServer(data.name, endpoint);
             webcornServers[server.serverId] = server;
         }
     });

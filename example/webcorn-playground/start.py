@@ -2,7 +2,8 @@ import os
 import shutil
 import subprocess
 
-print("remove webcorn dist directory...")
+print("remove webcorn build and dist directory...")
+shutil.rmtree('../../build', ignore_errors=True)
 shutil.rmtree('../../dist', ignore_errors=True)
 subprocess.run([shutil.which('npm'), 'install'], cwd="../..")
 subprocess.run([shutil.which('npm'), 'run', 'build'], cwd="../..")

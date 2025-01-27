@@ -12,14 +12,14 @@ const WEBCORN_PY = `
 `;
 
 const start = async (pyodideUrl, projectRoot, appSpec, appUrl, logger) => {
-    //console = logger;
+    console = logger;
     let begin = performance.now();
-    console.log("loading pyodide");
+    console.log("Loading pyodide...");
     const { loadPyodide } = await import(pyodideUrl);
     pyodide = await loadPyodide();
     let end = performance.now();
     let delta = (end-begin).toFixed(2);
-    console.log(`loaded pyodide successfully in ${delta}ms`);
+    console.log(`Loaded pyodide successfully in ${delta}ms`);
     // Django login need hashlib.pbkdf2_hmac, so hashlib need to be installed
     // before import, micropip will import hashlib, so install before load micropip
     await pyodide.loadPackage('hashlib');
@@ -60,7 +60,6 @@ const handleRequest = async (request) => {
 
         // simplify handling of seralization for postMessage
         response.headers = JSON.stringify(response.headers);
-        console.log('worker: received response from python application')
     } catch (e) {
         console.log(e);
     }

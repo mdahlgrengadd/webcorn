@@ -1,20 +1,14 @@
 import { startAppServer } from "webcorn/server";
 
-const consoleDom = document.getElementById('console');
 const options = {
         projectRoot: '/opt/project_django',
         appSpec: 'project_django.wsgi:application',
-        consoleDom,
+        log: addTerminalLine,
 }
-startAppServer(options);
-
-const previewFrame = document.getElementById('previewFrame');
-
-function updatePreview(content) {
-    const previewDoc = previewFrame.contentDocument || previewFrame.contentWindow.document;
-    previewDoc.open();
-    previewDoc.write(content);
-    previewDoc.close();
+try {
+    startAppServer(options);
+} catch (e) {
+    window.location = new URL('../', window.location).href;
 }
 
 // Add terminal functionality
@@ -28,7 +22,7 @@ function addTerminalLine(text) {
 }
 
 // Resizer functionality
-function initializeResizer(resizerElement, prevElement, nextElement, isHorizontal = true) {
+function initializeResizer(resizerElement, prevElement, nextElement, isHorizontal = false) {
     let isResizing = false;
     let startPos = 0;
     let startSize = 0;
@@ -51,18 +45,14 @@ function initializeResizer(resizerElement, prevElement, nextElement, isHorizonta
         const currentPos = isHorizontal ? e.pageX : e.pageY;
         const diff = currentPos - startPos;
 
+        const newPrevSize = Math.max(100, startSize + diff);
+        const newNextSize = Math.max(150, startSize2 - diff);
         if (isHorizontal) {
-            const newPrevSize = Math.max(100, startSize + diff);
-            const newNextSize = Math.max(150, startSize2 - diff);
             prevElement.style.width = `${newPrevSize}px`;
-            if (nextElement === document.querySelector('.preview')) {
-                nextElement.style.width = `${newNextSize}px`;
-            }
+            nextElement.style.width = `${newNextSize}px`;
         } else {
-            const containerHeight = document.querySelector('.main-content').offsetHeight;
-            const maxTerminalHeight = containerHeight - 200; // Minimum space for editor
-            const newSize = Math.min(maxTerminalHeight, Math.max(100, startSize - diff));
-            prevElement.style.height = `${newSize}px`;
+            prevElement.style.height = `${newPrevSize}px`;
+            nextElement.style.height = `${newNextSize}px`;
         }
     }
 
@@ -78,8 +68,35 @@ function initializeResizer(resizerElement, prevElement, nextElement, isHorizonta
 const previewResizer = document.getElementById('preview-resizer');
 
 initializeResizer(previewResizer, 
-    document.querySelector('.main-content'), 
-    document.querySelector('.preview'));
+    document.querySelector('.preview'),
+    document.querySelector('.main-content'));
 
-setTimeout(() => addTerminalLine('$ Starting development server...'), 1000);
-setTimeout(() => addTerminalLine('$ Compiled successfully!'), 2000);
+setTimeout(() => addTerminalLine('Loading...'), 1000);
+
+
+let appUrl = new URL('./~webcorn/admin', self.location).href;
+
+const addressInput = document.querySelector('.address-input');
+addressInput.value = appUrl;
+
+const previewFrame = document.getElementById('previewFrame');
+
+setTimeout(() => { previewFrame.src = appUrl; }, 1000);
+
+addressInput.addEventListener('keydown', (e) => {
+    if (e.code === 'Enter') {
+        appUrl = addressInput.value;
+        previewFrame.src = appUrl;
+    }
+});
+
+const refreshButton = document.getElementById('refreshButton');
+refreshButton.addEventListener('click', () => {
+    appUrl = addressInput.value;
+    previewFrame.src = appUrl;
+});
+
+const homeButton = document.getElementById('homeButton');
+homeButton.addEventListener('click', () => {
+    window.location = new URL('../', window.location).href;
+});

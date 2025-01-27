@@ -352,7 +352,7 @@ const webcornConfig = {
     projectRoot: '/',
     appSpec: 'app:app',
     appUrl: 'app',
-    consoleDom: null,
+    log: null,
 };
 
 const WORKER_JS = `
@@ -1358,7 +1358,7 @@ async def run_asgi(request):
 \`;
 
 const start = async (pyodideUrl, projectRoot, appSpec, appUrl, logger) => {
-    //console = logger;
+    console$1 = logger;
     let begin = performance.now();
     console$1.log("loading pyodide");
     const { loadPyodide } = await import(pyodideUrl);
@@ -1406,7 +1406,6 @@ const handleRequest = async (request) => {
 
         // simplify handling of seralization for postMessage
         response.headers = JSON.stringify(response.headers);
-        console$1.log('worker: received response from python application');
     } catch (e) {
         console$1.log(e);
     }
@@ -1425,6 +1424,28 @@ expose({
 
 const WORKER_URL = URL.createObjectURL(new Blob([WORKER_JS], {type: 'text/javascript'}));
 
+const consoleLog = (msg) => {
+    if (webcornConfig.log) {
+        webcornConfig.log(msg);
+    }
+};
+
+const accessLog = (request, response) => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth()+1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    const hours = String(now.getHours()).padStart(2, '0');
+    const minutes = String(now.getMinutes()).padStart(2, '0');
+    const seconds = String(now.getSeconds()).padStart(2, '0');
+    const time = `[${year}-${month}-${day} ${hours}:${minutes}:${seconds}]`;
+    const method = request.method;
+    let path = request.path;
+    if (request.query) path += '?' + request.query;
+    const status = response.status;
+    consoleLog(`${time} "${method} ${path}" ${status}`);
+};
+
 class WebcornWorker {
     constructor() {
         const parts = webcornConfig.projectRoot.split('/');
@@ -1432,18 +1453,7 @@ class WebcornWorker {
     }
 
     getLogger() {
-        return proxy({
-            log: (msg) => {
-                if (webcornConfig.consoleDom) {
-                    const p = document.createElement('p');
-                    p.innerHTML = `<span class="source">${this.name}:</span>`;
-                    const content = document.createElement('span');
-                    content.textContent = msg;
-                    p.appendChild(content);
-                    webcornConfig.consoleDom.append(p);
-                }
-            }
-        });
+        return proxy({ log: consoleLog });
     }
 
     async start() {
@@ -1471,6 +1481,8 @@ class WebcornWorker {
 
         response.headers = JSON.parse(response.headers);
 
+        accessLog(request, response);
+
         // Save cookie because the user agent will remove 'set-cookie'
         // when composing Response object due to 'Forbidden response header'
         const setcookies = response.headers['set-cookie'] || [];
@@ -1478,6 +1490,9 @@ class WebcornWorker {
             document.cookie = setcookie;
         }
         delete response.headers['set-cookie'];
+
+        // Remove X-Frame-Options in favour of webcorn
+        delete response.headers['x-frame-options'];
 
         return response;
     }
@@ -1508,7 +1523,7 @@ const retainWorker = async () => {
         }
     }
     if (!webcornConfig.pyodideUrl) {
-        console.log("Webcorn is not configed, config first with configWebcorn(options).");
+        consoleLog("Webcorn is not configed, config first with configWebcorn(options).");
         return null;
     }
     worker = null;
@@ -1519,7 +1534,7 @@ const retainWorker = async () => {
         worker.retain();
         return worker;
     } catch (e) {
-        console.log(e);
+        consoleLog(e);
         // TODO do something?
     }
 };
@@ -1533,7 +1548,7 @@ const handleRequest = async (request) => {
             return response;
         }
     } catch (e) {
-        console.log(e);
+        consoleLog(e);
     } finally {
         if (worker) {
             worker.release();
@@ -1551,7 +1566,7 @@ const handleRequest = async (request) => {
 const startAppServer = (options) => {
     if (!navigator.serviceWorker.controller) {
         const msg = "Service Worker is not started, failed to start webcorn server!";
-        console.log(msg);
+        consoleLog(msg);
         throw msg;
     }
     const {
@@ -1562,12 +1577,12 @@ const startAppServer = (options) => {
         pyodideUrl = "https://cdn.jsdelivr.net/pyodide/v0.27.2/full/pyodide.mjs",
         projectRoot = '/',
         appSpec = 'app:app',
-        consoleDom = null,
+        log = null,
     } = options;
     webcornConfig.pyodideUrl = pyodideUrl;
     webcornConfig.projectRoot = projectRoot;
     webcornConfig.appSpec = appSpec;
-    webcornConfig.consoleDom = consoleDom;
+    webcornConfig.log = log;
     webcornConfig.appUrl = new URL('./~webcorn', self.location).href;
 
     const serverUrl = new URL('.', self.location).href;
@@ -1589,10 +1604,103 @@ const startAppServer = (options) => {
     navigator.serviceWorker.controller.postMessage({type: 'server-ready', name: serverName}, [pingPort2, requestPort2]);
 };
 
-const consoleDom = document.getElementById('console');
 const options = {
         projectRoot: '/opt/project_fastapi',
         appSpec: 'src/app:app',
-        consoleDom,
+        log: addTerminalLine,
 };
-startAppServer(options);
+try {
+    startAppServer(options);
+} catch (e) {
+    window.location = new URL('../', window.location).href;
+}
+
+// Add terminal functionality
+const terminal = document.querySelector('.terminal-content');
+function addTerminalLine(text) {
+    const line = document.createElement('div');
+    line.className = 'terminal-line';
+    line.textContent = text;
+    terminal.appendChild(line);
+    terminal.scrollTop = terminal.scrollHeight;
+}
+
+// Resizer functionality
+function initializeResizer(resizerElement, prevElement, nextElement, isHorizontal = false) {
+    let isResizing = false;
+    let startPos = 0;
+    let startSize = 0;
+    let startSize2 = 0;
+
+    resizerElement.addEventListener('mousedown', (e) => {
+        isResizing = true;
+        resizerElement.classList.add('resizing');
+        startPos = isHorizontal ? e.pageX : e.pageY;
+        startSize = isHorizontal ? prevElement.offsetWidth : prevElement.offsetHeight;
+        startSize2 = isHorizontal ? nextElement.offsetWidth : nextElement.offsetHeight;
+
+        document.addEventListener('mousemove', onMouseMove);
+        document.addEventListener('mouseup', onMouseUp);
+    });
+
+    function onMouseMove(e) {
+        if (!isResizing) return;
+
+        const currentPos = isHorizontal ? e.pageX : e.pageY;
+        const diff = currentPos - startPos;
+
+        const newPrevSize = Math.max(100, startSize + diff);
+        const newNextSize = Math.max(150, startSize2 - diff);
+        if (isHorizontal) {
+            prevElement.style.width = `${newPrevSize}px`;
+            nextElement.style.width = `${newNextSize}px`;
+        } else {
+            prevElement.style.height = `${newPrevSize}px`;
+            nextElement.style.height = `${newNextSize}px`;
+        }
+    }
+
+    function onMouseUp() {
+        isResizing = false;
+        resizerElement.classList.remove('resizing');
+        document.removeEventListener('mousemove', onMouseMove);
+        document.removeEventListener('mouseup', onMouseUp);
+    }
+}
+
+// Initialize resizers
+const previewResizer = document.getElementById('preview-resizer');
+
+initializeResizer(previewResizer, 
+    document.querySelector('.preview'),
+    document.querySelector('.main-content'));
+
+setTimeout(() => addTerminalLine('Loading...'), 1000);
+
+
+let appUrl = new URL('./~webcorn/docs', self.location).href;
+
+const addressInput = document.querySelector('.address-input');
+addressInput.value = appUrl;
+
+const previewFrame = document.getElementById('previewFrame');
+
+setTimeout(() => { previewFrame.src = appUrl; }, 1000);
+
+addressInput.addEventListener('keydown', (e) => {
+    if (e.code === 'Enter') {
+        appUrl = addressInput.value;
+        previewFrame.src = appUrl;
+    }
+});
+
+const refreshButton = document.getElementById('refreshButton');
+refreshButton.addEventListener('click', () => {
+    appUrl = addressInput.value;
+    previewFrame.src = appUrl;
+});
+
+const homeButton = document.getElementById('homeButton');
+homeButton.addEventListener('click', () => {
+    window.location = new URL('../', window.location).href;
+});
