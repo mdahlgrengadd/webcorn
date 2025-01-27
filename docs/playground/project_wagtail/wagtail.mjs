@@ -1685,7 +1685,7 @@ addressInput.value = appUrl;
 
 const previewFrame = document.getElementById('previewFrame');
 
-setTimeout(() => { previewFrame.src = appUrl; }, 1000);
+setTimeout(() => { previewFrame.src = appUrl; }, 2000);
 
 addressInput.addEventListener('keydown', (e) => {
     if (e.code === 'Enter') {
