@@ -10,5 +10,5 @@ The Webcorn Server has the following features:
 
 ## Try it
 
-Access [Webcorn Playground](https://frybox.github.io/webcorn/) to see how Django/Flask/FastAPI/Wagtail applications run offline in the browser.
+Access [Webcorn Playground](https://frybox.github.io/webcorn/playground) to see how Django/Flask/FastAPI/Wagtail applications run offline in the browser.
 
