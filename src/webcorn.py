@@ -19,7 +19,7 @@ from js import Object
 from platform import python_implementation
 import micropip
 
-version = '0.2.5'
+version = '0.2.7'
 js_console = None
 application = None
 is_wsgi = True

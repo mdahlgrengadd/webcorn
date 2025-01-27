@@ -1,6 +1,6 @@
 {
   "name": "webcorn",
-  "version": "0.2.5",
+  "version": "0.2.7",
   "description": "ASGI/WSGI Server running in a browser",
   "scripts": {
     "start": "cd dist && python -m http.server",
@@ -33,6 +33,10 @@
   },
   "files": [
     "dist",
-    "src"
+    "src",
+    "README_zh.md",
+    "README.md",
+    "LICENSE",
+    "package.json"
   ]
 }
