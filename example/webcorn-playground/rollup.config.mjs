@@ -6,7 +6,7 @@ export default [
         input: 'src/django.js',
         output: [
             {
-                file: '../../docs/playground/project_django/django.mjs',
+                file: '../../docs/playground/project_django/django.js',
                 format: 'es'
             },
         ],
@@ -19,7 +19,7 @@ export default [
         input: 'src/fastapi.js',
         output: [
             {
-                file: '../../docs/playground/project_fastapi/fastapi.mjs',
+                file: '../../docs/playground/project_fastapi/fastapi.js',
                 format: 'es'
             },
         ],
@@ -32,7 +32,7 @@ export default [
         input: 'src/flask.js',
         output: [
             {
-                file: '../../docs/playground/project_flask/flask.mjs',
+                file: '../../docs/playground/project_flask/flask.js',
                 format: 'es'
             },
         ],
@@ -45,7 +45,7 @@ export default [
         input: 'src/wagtail.js',
         output: [
             {
-                file: '../../docs/playground/project_wagtail/wagtail.mjs',
+                file: '../../docs/playground/project_wagtail/wagtail.js',
                 format: 'es'
             },
         ],
@@ -57,7 +57,7 @@ export default [
     {
         input: 'src/sw.js',
         output: {
-            file: '../../docs/playground/sw.mjs',
+            file: '../../docs/playground/sw.js',
             format: 'es'
         },
         plugins: [

@@ -107,7 +107,7 @@
         const main = document.querySelector('.main');
         // 检查浏览器是否支持 Service Worker
         if ('serviceWorker' in navigator) {
-            const serviceWorkerScript = "sw.mjs";
+            const serviceWorkerScript = "sw.js";
             const type = 'module';
             // 注册 Service Worker
             navigator.serviceWorker.register(serviceWorkerScript, {type})
