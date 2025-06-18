@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 from pydantic import BaseModel
+from typing import Optional
 
 app = FastAPI()
 
@@ -7,7 +8,7 @@ app = FastAPI()
 class Item(BaseModel):
     name: str
     price: float
-    is_offer: bool | None = None
+    is_offer: Optional[bool] = None
 
 
 @app.get("/")
@@ -15,8 +16,13 @@ async def read_root():
     return {"Hello": "World"}
 
 
+@app.get("/health")
+async def health_check():
+    return {"status": "healthy", "message": "FastAPI is running in Webcorn"}
+
+
 @app.get("/items/{item_id}")
-async def read_item(item_id: int, q: str | None = None):
+async def read_item(item_id: int, q: Optional[str] = None):
     return {"item_id": item_id, "q": q}
 
 
